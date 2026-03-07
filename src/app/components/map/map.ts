@@ -9,6 +9,7 @@ import {
   NgZone,
 } from '@angular/core';
 import * as L from 'leaflet';
+import { GeoSearchControl, OpenStreetMapProvider } from 'leaflet-geosearch';
 import { Camera } from '../../models/camera.model';
 import { CameraService } from '../../services/camera.service';
 
@@ -84,6 +85,17 @@ export class MapComponent implements AfterViewInit, OnDestroy {
         { position: 'topright' },
       )
       .addTo(this.map);
+
+    const searchControl = GeoSearchControl({
+      provider: new OpenStreetMapProvider(),
+      style: 'bar',
+      autoComplete: true,
+      autoCompleteDelay: 250,
+      showMarker: false,
+      showPopup: false,
+      searchLabel: 'Search for an address...',
+    });
+    this.map.addControl(searchControl);
 
     this.map.on('click', (e: L.LeafletMouseEvent) => {
       if (this.addingBlocked) {
