@@ -1,0 +1,28 @@
+:host {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+:host ::ng-deep .camera-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #1e293b;
+  border: 2px solid #38bdf8;
+  color: #38bdf8;
+  cursor: grab;
+  transition: border-color 0.15s;
+}
+
+:host ::ng-deep .camera-marker.selected {
+  border-color: #facc15;
+  color: #facc15;
+}
+
+:host ::ng-deep .camera-marker:active {
+  cursor: grabbing;
+}
