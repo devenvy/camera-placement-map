@@ -22,6 +22,15 @@ ng serve
 
 Open `http://localhost:4200/`. Click **+ Add** to place a camera at the center of the map, then drag it into position and adjust its properties in the sidebar.
 
+## Docker
+
+```bash
+docker build -t camera-placement-map .
+docker run -p 8080:80 camera-placement-map
+```
+
+Open `http://localhost:8080/`.
+
 ## Building
 
 ```bash
