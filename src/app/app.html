@@ -1,4 +1,4 @@
 <div class="flex h-screen w-screen overflow-hidden">
-  <app-sidebar />
-  <app-map class="flex-1" />
+  <app-sidebar [mapRef]="mapComponent" />
+  <app-map #mapComponent class="flex-1" />
 </div>

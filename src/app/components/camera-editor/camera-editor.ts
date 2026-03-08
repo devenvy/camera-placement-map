@@ -12,6 +12,10 @@ export class CameraEditorComponent {
 
   camera = input.required<Camera>();
 
+  protected cloneCamera(): void {
+    this.cameraService.cloneCamera(this.camera().id);
+  }
+
   protected updateName(event: Event): void {
     const value = (event.target as HTMLInputElement).value;
     this.cameraService.updateCamera(this.camera().id, { name: value });

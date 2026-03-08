@@ -1,6 +1,7 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, input, signal } from '@angular/core';
 import { CameraService } from '../../services/camera.service';
 import { CameraEditorComponent } from '../camera-editor/camera-editor';
+import { MapComponent } from '../map/map';
 
 @Component({
   selector: 'app-sidebar',
@@ -12,8 +13,15 @@ export class SidebarComponent {
   protected cameraService = inject(CameraService);
   protected collapsed = signal(false);
 
+  mapRef = input.required<MapComponent>();
+
   protected toggleCollapse(): void {
     this.collapsed.update((v) => !v);
+  }
+
+  protected addCamera(): void {
+    const center = this.mapRef().getCenter();
+    this.cameraService.addCamera(center.lat, center.lng);
   }
 
   protected selectCamera(id: string): void {

@@ -34,18 +34,34 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     { marker: L.Marker; fov: L.Polygon }
   >();
   private resizeObserver?: ResizeObserver;
-  private addingBlocked = false;
+
+  constructor() {
+    effect(() => {
+      const cameras = this.cameraService.cameras();
+      if (this.map) {
+        this.syncCamerasToMap(cameras);
+      }
+    });
+
+    effect(() => {
+      const selectedId = this.cameraService.selectedId();
+      if (this.map) {
+        this.highlightSelected(selectedId);
+        this.flyToCamera(selectedId);
+      }
+    });
+  }
 
   ngAfterViewInit(): void {
     this.initMap();
+    const cameras = this.cameraService.cameras();
+    this.syncCamerasToMap(cameras);
+    this.fitBoundsToAll(cameras);
+  }
 
-    effect(() => {
-      this.syncCamerasToMap(this.cameraService.cameras());
-    });
-
-    effect(() => {
-      this.highlightSelected(this.cameraService.selectedId());
-    });
+  getCenter(): { lat: number; lng: number } {
+    const center = this.map.getCenter();
+    return { lat: center.lat, lng: center.lng };
   }
 
   ngOnDestroy(): void {
@@ -64,7 +80,8 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
       {
         attribution: 'Tiles &copy; Esri',
-        maxZoom: 19,
+        maxNativeZoom: 19,
+        maxZoom: 22,
       },
     );
 
@@ -72,7 +89,8 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
       {
         attribution: '&copy; OpenStreetMap contributors',
-        maxZoom: 19,
+        maxNativeZoom: 19,
+        maxZoom: 22,
       },
     );
 
@@ -96,16 +114,6 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       searchLabel: 'Search for an address...',
     });
     this.map.addControl(searchControl);
-
-    this.map.on('click', (e: L.LeafletMouseEvent) => {
-      if (this.addingBlocked) {
-        this.addingBlocked = false;
-        return;
-      }
-      this.zone.run(() => {
-        this.cameraService.addCamera(e.latlng.lat, e.latlng.lng);
-      });
-    });
 
     this.resizeObserver = new ResizeObserver(() => {
       this.map.invalidateSize();
@@ -171,7 +179,6 @@ export class MapComponent implements AfterViewInit, OnDestroy {
 
     marker.on('click', (e: L.LeafletMouseEvent) => {
       L.DomEvent.stopPropagation(e);
-      this.addingBlocked = true;
       this.zone.run(() => {
         this.cameraService.selectCamera(camera.id);
       });
@@ -190,7 +197,6 @@ export class MapComponent implements AfterViewInit, OnDestroy {
 
     fov.on('click', (e: L.LeafletMouseEvent) => {
       L.DomEvent.stopPropagation(e);
-      this.addingBlocked = true;
       this.zone.run(() => {
         this.cameraService.selectCamera(camera.id);
       });
@@ -230,6 +236,22 @@ export class MapComponent implements AfterViewInit, OnDestroy {
         layers.marker.setIcon(this.createIcon(camera));
       }
     }
+  }
+
+  private flyToCamera(selectedId: string | null): void {
+    if (!selectedId) return;
+    const camera = this.cameraService.cameras().find((c) => c.id === selectedId);
+    if (camera) {
+      this.map.flyTo([camera.lat, camera.lng], Math.max(this.map.getZoom(), 18), {
+        duration: 0.5,
+      });
+    }
+  }
+
+  private fitBoundsToAll(cameras: Camera[]): void {
+    if (cameras.length === 0) return;
+    const bounds = L.latLngBounds(cameras.map((c) => [c.lat, c.lng] as L.LatLngTuple));
+    this.map.fitBounds(bounds, { padding: [50, 50], maxZoom: 19 });
   }
 
   private computeFovPolygon(camera: Camera): L.LatLngExpression[] {

@@ -45,6 +45,19 @@ export class CameraService {
     }
   }
 
+  cloneCamera(id: string): Camera | null {
+    const source = this._cameras().find((c) => c.id === id);
+    if (!source) return null;
+    const clone: Camera = {
+      ...source,
+      id: crypto.randomUUID(),
+      name: `${source.name} (copy)`,
+    };
+    this._cameras.update((prev) => [...prev, clone]);
+    this._selectedId.set(clone.id);
+    return clone;
+  }
+
   selectCamera(id: string | null): void {
     this._selectedId.set(id);
   }
