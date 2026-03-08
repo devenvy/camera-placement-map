@@ -12,6 +12,7 @@ import * as L from 'leaflet';
 import { GeoSearchControl, OpenStreetMapProvider } from 'leaflet-geosearch';
 import { Camera } from '../../models/camera.model';
 import { CameraService } from '../../services/camera.service';
+import { BuildingService } from '../../services/building.service';
 
 const CAMERA_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`;
 
@@ -27,6 +28,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   @ViewChild('mapContainer', { static: true }) mapContainer!: ElementRef<HTMLDivElement>;
 
   private cameraService = inject(CameraService);
+  private buildingService = inject(BuildingService);
   private zone = inject(NgZone);
   private map!: L.Map;
   private cameraLayers = new Map<
@@ -34,6 +36,9 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     { marker: L.Marker; fov: L.Polygon }
   >();
   private resizeObserver?: ResizeObserver;
+  private buildingLayer = L.layerGroup();
+  private buildingsVisible = false;
+  private buildingDebounceTimer?: ReturnType<typeof setTimeout>;
 
   constructor() {
     effect(() => {
@@ -99,10 +104,30 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     L.control
       .layers(
         { Satellite: satellite, Street: street },
-        {},
+        { Buildings: this.buildingLayer },
         { position: 'topright' },
       )
       .addTo(this.map);
+
+    this.map.on('overlayadd', (e: L.LayersControlEvent) => {
+      if (e.name === 'Buildings') {
+        this.buildingsVisible = true;
+        this.loadBuildings();
+      }
+    });
+
+    this.map.on('overlayremove', (e: L.LayersControlEvent) => {
+      if (e.name === 'Buildings') {
+        this.buildingsVisible = false;
+      }
+    });
+
+    this.map.on('moveend', () => {
+      if (this.buildingsVisible) {
+        clearTimeout(this.buildingDebounceTimer);
+        this.buildingDebounceTimer = setTimeout(() => this.loadBuildings(), 300);
+      }
+    });
 
     const searchControl = GeoSearchControl({
       provider: new OpenStreetMapProvider(),
@@ -252,6 +277,33 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     if (cameras.length === 0) return;
     const bounds = L.latLngBounds(cameras.map((c) => [c.lat, c.lng] as L.LatLngTuple));
     this.map.fitBounds(bounds, { padding: [50, 50], maxZoom: 19 });
+  }
+
+  private async loadBuildings(): Promise<void> {
+    const zoom = this.map.getZoom();
+    if (!this.buildingService.canFetch(zoom)) {
+      this.buildingLayer.clearLayers();
+      return;
+    }
+
+    const bounds = this.map.getBounds();
+    const buildings = await this.buildingService.fetchBuildings(
+      bounds.getSouth(),
+      bounds.getWest(),
+      bounds.getNorth(),
+      bounds.getEast(),
+    );
+
+    this.buildingLayer.clearLayers();
+    for (const building of buildings) {
+      L.polygon(building.coords, {
+        color: '#f97316',
+        fillColor: '#f97316',
+        fillOpacity: 0.08,
+        weight: 1.5,
+        interactive: false,
+      }).addTo(this.buildingLayer);
+    }
   }
 
   private computeFovPolygon(camera: Camera): L.LatLngExpression[] {
