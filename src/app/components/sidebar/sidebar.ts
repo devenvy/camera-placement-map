@@ -1,5 +1,6 @@
 import { Component, inject, input, signal } from '@angular/core';
 import { CameraService } from '../../services/camera.service';
+import { BuildingService } from '../../services/building.service';
 import { CameraEditorComponent } from '../camera-editor/camera-editor';
 import { MapComponent } from '../map/map';
 
@@ -11,6 +12,7 @@ import { MapComponent } from '../map/map';
 })
 export class SidebarComponent {
   protected cameraService = inject(CameraService);
+  protected buildingService = inject(BuildingService);
   protected collapsed = signal(false);
 
   mapRef = input.required<MapComponent>();
@@ -42,6 +44,17 @@ export class SidebarComponent {
     a.download = `cameras-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  protected toggleBuildings(): void {
+    this.buildingService.setEnabled(!this.buildingService.enabled());
+  }
+
+  protected updateSearchRadius(event: Event): void {
+    const value = +(event.target as HTMLInputElement).value;
+    if (value > 0) {
+      this.buildingService.setSearchRadius(value);
+    }
   }
 
   protected importCameras(event: Event): void {

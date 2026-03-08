@@ -1,4 +1,5 @@
-import { Injectable } from '@angular/core';
+import { Injectable, signal, effect } from '@angular/core';
+import { Camera } from '../models/camera.model';
 
 export interface BuildingPolygon {
   id: number;
@@ -6,17 +7,66 @@ export interface BuildingPolygon {
 }
 
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
-const MIN_ZOOM = 16;
+const SETTINGS_KEY = 'camera-placement-map-buildings';
+
+interface BuildingSettings {
+  enabled: boolean;
+  searchRadius: number;
+}
 
 @Injectable({ providedIn: 'root' })
 export class BuildingService {
   private cache = new Map<string, BuildingPolygon[]>();
 
-  canFetch(zoom: number): boolean {
-    return zoom >= MIN_ZOOM;
+  private readonly _enabled = signal(false);
+  readonly enabled = this._enabled.asReadonly();
+
+  private readonly _searchRadius = signal(150);
+  readonly searchRadius = this._searchRadius.asReadonly();
+
+  constructor() {
+    this.loadSettings();
+    effect(() => {
+      const settings: BuildingSettings = {
+        enabled: this._enabled(),
+        searchRadius: this._searchRadius(),
+      };
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    });
   }
 
-  async fetchBuildings(
+  setEnabled(value: boolean): void {
+    this._enabled.set(value);
+  }
+
+  setSearchRadius(value: number): void {
+    this._searchRadius.set(Math.max(10, Math.min(1000, value)));
+  }
+
+  async fetchBuildingsAroundCameras(
+    cameras: Camera[],
+  ): Promise<BuildingPolygon[]> {
+    if (cameras.length === 0) return [];
+
+    const radius = this._searchRadius();
+    const padDeg = (radius / 111000) * 1.2;
+
+    let south = Infinity;
+    let west = Infinity;
+    let north = -Infinity;
+    let east = -Infinity;
+
+    for (const camera of cameras) {
+      south = Math.min(south, camera.lat - padDeg);
+      west = Math.min(west, camera.lng - padDeg);
+      north = Math.max(north, camera.lat + padDeg);
+      east = Math.max(east, camera.lng + padDeg);
+    }
+
+    return this.fetchBuildings(south, west, north, east);
+  }
+
+  private async fetchBuildings(
     south: number,
     west: number,
     north: number,
@@ -28,30 +78,49 @@ export class BuildingService {
 
     const query = `[out:json][timeout:10];way["building"](${south},${west},${north},${east});out geom;`;
 
-    const response = await fetch(OVERPASS_URL, {
-      method: 'POST',
-      body: `data=${encodeURIComponent(query)}`,
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    });
+    try {
+      const response = await fetch(OVERPASS_URL, {
+        method: 'POST',
+        body: `data=${encodeURIComponent(query)}`,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      });
 
-    if (!response.ok) return [];
+      if (!response.ok) return [];
 
-    const data = await response.json();
-    const buildings: BuildingPolygon[] = [];
+      const data = await response.json();
+      const buildings: BuildingPolygon[] = [];
 
-    for (const element of data.elements ?? []) {
-      if (element.type === 'way' && element.geometry) {
-        buildings.push({
-          id: element.id,
-          coords: element.geometry.map((p: { lat: number; lon: number }) => [
-            p.lat,
-            p.lon,
-          ]),
-        });
+      for (const element of data.elements ?? []) {
+        if (element.type === 'way' && element.geometry) {
+          buildings.push({
+            id: element.id,
+            coords: element.geometry.map(
+              (p: { lat: number; lon: number }) => [p.lat, p.lon] as [number, number],
+            ),
+          });
+        }
       }
-    }
 
-    this.cache.set(key, buildings);
-    return buildings;
+      this.cache.set(key, buildings);
+      return buildings;
+    } catch {
+      return [];
+    }
+  }
+
+  private loadSettings(): void {
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      if (!raw) return;
+      const settings: BuildingSettings = JSON.parse(raw);
+      if (typeof settings.enabled === 'boolean') {
+        this._enabled.set(settings.enabled);
+      }
+      if (typeof settings.searchRadius === 'number') {
+        this._searchRadius.set(settings.searchRadius);
+      }
+    } catch {
+      // Ignore corrupt settings
+    }
   }
 }

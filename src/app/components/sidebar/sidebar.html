@@ -73,6 +73,43 @@
       <app-camera-editor [camera]="camera" />
     }
 
+    <!-- Buildings -->
+    <div class="px-4 py-3 border-t border-gray-700 shrink-0">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-xs font-semibold uppercase tracking-wider text-gray-400"
+          >Buildings</span
+        >
+        <button
+          (click)="toggleBuildings()"
+          class="text-xs px-2 py-0.5 rounded transition-colors"
+          [class]="
+            buildingService.enabled()
+              ? 'bg-orange-600 hover:bg-orange-500'
+              : 'bg-gray-700 hover:bg-gray-600'
+          "
+        >
+          {{ buildingService.enabled() ? 'ON' : 'OFF' }}
+        </button>
+      </div>
+      @if (buildingService.enabled()) {
+        <div class="flex items-center justify-between">
+          <span class="text-xs text-gray-500">Search radius</span>
+          <div class="flex items-center gap-1">
+            <input
+              type="number"
+              min="10"
+              max="1000"
+              step="10"
+              [value]="buildingService.searchRadius()"
+              (change)="updateSearchRadius($event)"
+              class="w-14 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-xs text-right focus:border-sky-500 focus:outline-none"
+            />
+            <span class="text-xs text-gray-500">m</span>
+          </div>
+        </div>
+      }
+    </div>
+
     <!-- Import / Export -->
     <div class="p-4 border-t border-gray-700 flex gap-2 shrink-0">
       <button

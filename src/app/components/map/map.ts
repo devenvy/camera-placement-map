@@ -12,7 +12,14 @@ import * as L from 'leaflet';
 import { GeoSearchControl, OpenStreetMapProvider } from 'leaflet-geosearch';
 import { Camera } from '../../models/camera.model';
 import { CameraService } from '../../services/camera.service';
-import { BuildingService } from '../../services/building.service';
+import {
+  BuildingService,
+  BuildingPolygon,
+} from '../../services/building.service';
+import {
+  computeSimpleFov,
+  computeVisibilityFov,
+} from '../../utils/visibility';
 
 const CAMERA_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`;
 
@@ -25,7 +32,8 @@ const FOV_SELECTED_COLOR = '#facc15';
   styleUrl: './map.css',
 })
 export class MapComponent implements AfterViewInit, OnDestroy {
-  @ViewChild('mapContainer', { static: true }) mapContainer!: ElementRef<HTMLDivElement>;
+  @ViewChild('mapContainer', { static: true })
+  mapContainer!: ElementRef<HTMLDivElement>;
 
   private cameraService = inject(CameraService);
   private buildingService = inject(BuildingService);
@@ -37,14 +45,16 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   >();
   private resizeObserver?: ResizeObserver;
   private buildingLayer = L.layerGroup();
-  private buildingsVisible = false;
-  private buildingDebounceTimer?: ReturnType<typeof setTimeout>;
+  private cachedBuildings: BuildingPolygon[] = [];
 
   constructor() {
     effect(() => {
       const cameras = this.cameraService.cameras();
       if (this.map) {
         this.syncCamerasToMap(cameras);
+        if (this.buildingService.enabled()) {
+          this.loadBuildings();
+        }
       }
     });
 
@@ -55,6 +65,25 @@ export class MapComponent implements AfterViewInit, OnDestroy {
         this.flyToCamera(selectedId);
       }
     });
+
+    // React to building settings changes
+    effect(() => {
+      const enabled = this.buildingService.enabled();
+      const _radius = this.buildingService.searchRadius();
+      if (this.map) {
+        if (enabled) {
+          if (!this.map.hasLayer(this.buildingLayer)) {
+            this.buildingLayer.addTo(this.map);
+          }
+          this.loadBuildings();
+        } else {
+          this.map.removeLayer(this.buildingLayer);
+          this.buildingLayer.clearLayers();
+          this.cachedBuildings = [];
+          this.recomputeAllFovs();
+        }
+      }
+    });
   }
 
   ngAfterViewInit(): void {
@@ -62,6 +91,12 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     const cameras = this.cameraService.cameras();
     this.syncCamerasToMap(cameras);
     this.fitBoundsToAll(cameras);
+
+    // Restore buildings if previously enabled
+    if (this.buildingService.enabled()) {
+      this.buildingLayer.addTo(this.map);
+      this.loadBuildings();
+    }
   }
 
   getCenter(): { lat: number; lng: number } {
@@ -104,30 +139,10 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     L.control
       .layers(
         { Satellite: satellite, Street: street },
-        { Buildings: this.buildingLayer },
+        {},
         { position: 'topright' },
       )
       .addTo(this.map);
-
-    this.map.on('overlayadd', (e: L.LayersControlEvent) => {
-      if (e.name === 'Buildings') {
-        this.buildingsVisible = true;
-        this.loadBuildings();
-      }
-    });
-
-    this.map.on('overlayremove', (e: L.LayersControlEvent) => {
-      if (e.name === 'Buildings') {
-        this.buildingsVisible = false;
-      }
-    });
-
-    this.map.on('moveend', () => {
-      if (this.buildingsVisible) {
-        clearTimeout(this.buildingDebounceTimer);
-        this.buildingDebounceTimer = setTimeout(() => this.loadBuildings(), 300);
-      }
-    });
 
     const searchControl = GeoSearchControl({
       provider: new OpenStreetMapProvider(),
@@ -162,7 +177,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       if (existing) {
         existing.marker.setLatLng([camera.lat, camera.lng]);
         existing.marker.setIcon(this.createIcon(camera));
-        existing.fov.setLatLngs(this.computeFovPolygon(camera));
+        existing.fov.setLatLngs(this.computeFovForCamera(camera));
       } else {
         this.addCameraToMap(camera);
       }
@@ -186,7 +201,10 @@ export class MapComponent implements AfterViewInit, OnDestroy {
           .find((c) => c.id === camera.id);
         if (current) {
           fovLayer.setLatLngs(
-            this.computeFovPolygon({ ...current, lat: pos.lat, lng: pos.lng }),
+            this.computeFovForCamera(
+              { ...current, lat: pos.lat, lng: pos.lng },
+              true,
+            ),
           );
         }
       }
@@ -213,7 +231,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     const isSelected = camera.id === selectedId;
     const color = isSelected ? FOV_SELECTED_COLOR : FOV_COLOR;
 
-    const fov = L.polygon(this.computeFovPolygon(camera), {
+    const fov = L.polygon(this.computeFovForCamera(camera), {
       color,
       fillColor: color,
       fillOpacity: 0.2,
@@ -253,10 +271,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
         weight: isSelected ? 2 : 1,
       });
       layers.marker.setZIndexOffset(isSelected ? 1000 : 0);
-      // Update icon to reflect selection
-      const camera = this.cameraService
-        .cameras()
-        .find((c) => c.id === id);
+      const camera = this.cameraService.cameras().find((c) => c.id === id);
       if (camera) {
         layers.marker.setIcon(this.createIcon(camera));
       }
@@ -265,34 +280,38 @@ export class MapComponent implements AfterViewInit, OnDestroy {
 
   private flyToCamera(selectedId: string | null): void {
     if (!selectedId) return;
-    const camera = this.cameraService.cameras().find((c) => c.id === selectedId);
+    const camera = this.cameraService
+      .cameras()
+      .find((c) => c.id === selectedId);
     if (camera) {
-      this.map.flyTo([camera.lat, camera.lng], Math.max(this.map.getZoom(), 18), {
-        duration: 0.5,
-      });
+      this.map.flyTo(
+        [camera.lat, camera.lng],
+        Math.max(this.map.getZoom(), 18),
+        { duration: 0.5 },
+      );
     }
   }
 
   private fitBoundsToAll(cameras: Camera[]): void {
     if (cameras.length === 0) return;
-    const bounds = L.latLngBounds(cameras.map((c) => [c.lat, c.lng] as L.LatLngTuple));
+    const bounds = L.latLngBounds(
+      cameras.map((c) => [c.lat, c.lng] as L.LatLngTuple),
+    );
     this.map.fitBounds(bounds, { padding: [50, 50], maxZoom: 19 });
   }
 
   private async loadBuildings(): Promise<void> {
-    const zoom = this.map.getZoom();
-    if (!this.buildingService.canFetch(zoom)) {
+    const cameras = this.cameraService.cameras();
+    if (cameras.length === 0) {
       this.buildingLayer.clearLayers();
+      this.cachedBuildings = [];
       return;
     }
 
-    const bounds = this.map.getBounds();
-    const buildings = await this.buildingService.fetchBuildings(
-      bounds.getSouth(),
-      bounds.getWest(),
-      bounds.getNorth(),
-      bounds.getEast(),
-    );
+    const buildings =
+      await this.buildingService.fetchBuildingsAroundCameras(cameras);
+
+    this.cachedBuildings = buildings;
 
     this.buildingLayer.clearLayers();
     for (const building of buildings) {
@@ -304,51 +323,31 @@ export class MapComponent implements AfterViewInit, OnDestroy {
         interactive: false,
       }).addTo(this.buildingLayer);
     }
+
+    this.recomputeAllFovs();
   }
 
-  private computeFovPolygon(camera: Camera): L.LatLngExpression[] {
-    const points: L.LatLngExpression[] = [];
-    const { lat, lng, heading, fov, range } = camera;
-
-    points.push([lat, lng]);
-
-    const segments = 32;
-    const startAngle = heading - fov / 2;
-    const endAngle = heading + fov / 2;
-    const step = (endAngle - startAngle) / segments;
-
-    for (let i = 0; i <= segments; i++) {
-      const angle = startAngle + step * i;
-      points.push(this.destinationPoint(lat, lng, range, angle));
+  private recomputeAllFovs(): void {
+    const cameras = this.cameraService.cameras();
+    for (const camera of cameras) {
+      const existing = this.cameraLayers.get(camera.id);
+      if (existing) {
+        existing.fov.setLatLngs(this.computeFovForCamera(camera));
+      }
     }
-
-    points.push([lat, lng]);
-    return points;
   }
 
-  private destinationPoint(
-    lat: number,
-    lng: number,
-    distanceMeters: number,
-    bearingDeg: number,
-  ): [number, number] {
-    const R = 6371000;
-    const d = distanceMeters / R;
-    const brng = (bearingDeg * Math.PI) / 180;
-    const lat1 = (lat * Math.PI) / 180;
-    const lng1 = (lng * Math.PI) / 180;
-
-    const lat2 = Math.asin(
-      Math.sin(lat1) * Math.cos(d) +
-        Math.cos(lat1) * Math.sin(d) * Math.cos(brng),
-    );
-    const lng2 =
-      lng1 +
-      Math.atan2(
-        Math.sin(brng) * Math.sin(d) * Math.cos(lat1),
-        Math.cos(d) - Math.sin(lat1) * Math.sin(lat2),
-      );
-
-    return [(lat2 * 180) / Math.PI, (lng2 * 180) / Math.PI];
+  private computeFovForCamera(
+    camera: Camera,
+    useSimple = false,
+  ): L.LatLngExpression[] {
+    if (
+      useSimple ||
+      !this.buildingService.enabled() ||
+      this.cachedBuildings.length === 0
+    ) {
+      return computeSimpleFov(camera);
+    }
+    return computeVisibilityFov(camera, this.cachedBuildings);
   }
 }
