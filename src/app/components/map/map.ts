@@ -6,6 +6,7 @@ import {
   ElementRef,
   inject,
   effect,
+  untracked,
   NgZone,
 } from '@angular/core';
 import * as L from 'leaflet';
@@ -61,8 +62,10 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     effect(() => {
       const selectedId = this.cameraService.selectedId();
       if (this.map) {
-        this.highlightSelected(selectedId);
-        this.flyToCamera(selectedId);
+        untracked(() => {
+          this.highlightSelected(selectedId);
+          this.flyToCamera(selectedId);
+        });
       }
     });
 
