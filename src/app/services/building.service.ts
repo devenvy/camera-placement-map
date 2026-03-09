@@ -12,6 +12,8 @@ const SETTINGS_KEY = 'camera-placement-map-buildings';
 interface BuildingSettings {
   enabled: boolean;
   searchRadius: number;
+  offsetX: number;
+  offsetY: number;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -24,12 +26,20 @@ export class BuildingService {
   private readonly _searchRadius = signal(150);
   readonly searchRadius = this._searchRadius.asReadonly();
 
+  private readonly _offsetX = signal(0);
+  readonly offsetX = this._offsetX.asReadonly();
+
+  private readonly _offsetY = signal(0);
+  readonly offsetY = this._offsetY.asReadonly();
+
   constructor() {
     this.loadSettings();
     effect(() => {
       const settings: BuildingSettings = {
         enabled: this._enabled(),
         searchRadius: this._searchRadius(),
+        offsetX: this._offsetX(),
+        offsetY: this._offsetY(),
       };
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     });
@@ -41,6 +51,14 @@ export class BuildingService {
 
   setSearchRadius(value: number): void {
     this._searchRadius.set(Math.max(10, Math.min(1000, value)));
+  }
+
+  setOffsetX(value: number): void {
+    this._offsetX.set(Math.max(-50, Math.min(50, value)));
+  }
+
+  setOffsetY(value: number): void {
+    this._offsetY.set(Math.max(-50, Math.min(50, value)));
   }
 
   async fetchBuildingsAroundCameras(
@@ -118,6 +136,12 @@ export class BuildingService {
       }
       if (typeof settings.searchRadius === 'number') {
         this._searchRadius.set(settings.searchRadius);
+      }
+      if (typeof settings.offsetX === 'number') {
+        this._offsetX.set(settings.offsetX);
+      }
+      if (typeof settings.offsetY === 'number') {
+        this._offsetY.set(settings.offsetY);
       }
     } catch {
       // Ignore corrupt settings

@@ -1,6 +1,7 @@
 import { Component, inject, input, signal } from '@angular/core';
 import { CameraService } from '../../services/camera.service';
 import { BuildingService } from '../../services/building.service';
+import { SettingsService } from '../../services/settings.service';
 import { CameraEditorComponent } from '../camera-editor/camera-editor';
 import { MapComponent } from '../map/map';
 
@@ -13,7 +14,9 @@ import { MapComponent } from '../map/map';
 export class SidebarComponent {
   protected cameraService = inject(CameraService);
   protected buildingService = inject(BuildingService);
+  protected settingsService = inject(SettingsService);
   protected collapsed = signal(false);
+  protected settingsOpen = signal(false);
 
   mapRef = input.required<MapComponent>();
 
@@ -54,6 +57,36 @@ export class SidebarComponent {
     const value = +(event.target as HTMLInputElement).value;
     if (value > 0) {
       this.buildingService.setSearchRadius(value);
+    }
+  }
+
+  protected updateOffsetX(event: Event): void {
+    this.buildingService.setOffsetX(+(event.target as HTMLInputElement).value);
+  }
+
+  protected updateOffsetY(event: Event): void {
+    this.buildingService.setOffsetY(+(event.target as HTMLInputElement).value);
+  }
+
+  protected toggleSettings(): void {
+    this.settingsOpen.update((v) => !v);
+  }
+
+  protected updateApiKey(
+    provider: 'google' | 'mapbox' | 'bing',
+    event: Event,
+  ): void {
+    const value = (event.target as HTMLInputElement).value;
+    switch (provider) {
+      case 'google':
+        this.settingsService.setGoogleApiKey(value);
+        break;
+      case 'mapbox':
+        this.settingsService.setMapboxToken(value);
+        break;
+      case 'bing':
+        this.settingsService.setBingApiKey(value);
+        break;
     }
   }
 

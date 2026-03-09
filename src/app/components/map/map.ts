@@ -17,6 +17,7 @@ import {
   BuildingService,
   BuildingPolygon,
 } from '../../services/building.service';
+import { SettingsService } from '../../services/settings.service';
 import {
   computeSimpleFov,
   computeVisibilityFov,
@@ -38,6 +39,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
 
   private cameraService = inject(CameraService);
   private buildingService = inject(BuildingService);
+  private settingsService = inject(SettingsService);
   private zone = inject(NgZone);
   private map!: L.Map;
   private cameraLayers = new Map<
@@ -47,6 +49,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   private resizeObserver?: ResizeObserver;
   private buildingLayer = L.layerGroup();
   private cachedBuildings: BuildingPolygon[] = [];
+  private layerControl?: L.Control.Layers;
 
   constructor() {
     effect(() => {
@@ -85,6 +88,25 @@ export class MapComponent implements AfterViewInit, OnDestroy {
           this.cachedBuildings = [];
           this.recomputeAllFovs();
         }
+      }
+    });
+
+    // React to building offset changes
+    effect(() => {
+      const _ox = this.buildingService.offsetX();
+      const _oy = this.buildingService.offsetY();
+      if (this.map && this.buildingService.enabled()) {
+        untracked(() => this.renderBuildings());
+      }
+    });
+
+    // React to tile provider API key changes
+    effect(() => {
+      const _g = this.settingsService.googleApiKey();
+      const _m = this.settingsService.mapboxToken();
+      const _b = this.settingsService.bingApiKey();
+      if (this.map) {
+        untracked(() => this.rebuildLayerControl());
       }
     });
   }
@@ -128,24 +150,8 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       },
     );
 
-    const street = L.tileLayer(
-      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-      {
-        attribution: '&copy; OpenStreetMap contributors',
-        maxNativeZoom: 19,
-        maxZoom: 22,
-      },
-    );
-
     satellite.addTo(this.map);
-
-    L.control
-      .layers(
-        { Satellite: satellite, Street: street },
-        {},
-        { position: 'topright' },
-      )
-      .addTo(this.map);
+    this.rebuildLayerControl();
 
     const searchControl = GeoSearchControl({
       provider: new OpenStreetMapProvider(),
@@ -162,6 +168,57 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       this.map.invalidateSize();
     });
     this.resizeObserver.observe(this.mapContainer.nativeElement);
+  }
+
+  private rebuildLayerControl(): void {
+    if (this.layerControl) {
+      this.map.removeControl(this.layerControl);
+    }
+
+    const baseLayers: Record<string, L.TileLayer> = {
+      'Satellite (Esri)': L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        { attribution: 'Tiles &copy; Esri', maxNativeZoom: 19, maxZoom: 22 },
+      ),
+      Street: L.tileLayer(
+        'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        {
+          attribution: '&copy; OpenStreetMap contributors',
+          maxNativeZoom: 19,
+          maxZoom: 22,
+        },
+      ),
+    };
+
+    const googleKey = this.settingsService.googleApiKey();
+    if (googleKey) {
+      baseLayers['Google Satellite'] = L.tileLayer(
+        `https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}&key=${googleKey}`,
+        { attribution: '&copy; Google', maxNativeZoom: 20, maxZoom: 22 },
+      );
+    }
+
+    const mapboxToken = this.settingsService.mapboxToken();
+    if (mapboxToken) {
+      baseLayers['Mapbox Satellite'] = L.tileLayer(
+        `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/{z}/{x}/{y}?access_token=${mapboxToken}`,
+        {
+          attribution: '&copy; Mapbox',
+          maxNativeZoom: 20,
+          maxZoom: 22,
+          tileSize: 512,
+          zoomOffset: -1,
+        },
+      );
+    }
+
+    const bingKey = this.settingsService.bingApiKey();
+    if (bingKey) {
+      baseLayers['Bing Aerial'] = new BingTileLayer(bingKey);
+    }
+
+    this.layerControl = L.control.layers(baseLayers, {}, { position: 'topright' });
+    this.layerControl.addTo(this.map);
   }
 
   private syncCamerasToMap(cameras: Camera[]): void {
@@ -315,10 +372,17 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       await this.buildingService.fetchBuildingsAroundCameras(cameras);
 
     this.cachedBuildings = buildings;
+    this.renderBuildings();
+  }
+
+  private renderBuildings(): void {
+    const ox = this.buildingService.offsetX();
+    const oy = this.buildingService.offsetY();
 
     this.buildingLayer.clearLayers();
-    for (const building of buildings) {
-      L.polygon(building.coords, {
+    for (const building of this.cachedBuildings) {
+      const coords = this.applyBuildingOffset(building.coords, ox, oy);
+      L.polygon(coords, {
         color: '#f97316',
         fillColor: '#f97316',
         fillOpacity: 0.08,
@@ -328,6 +392,19 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     }
 
     this.recomputeAllFovs();
+  }
+
+  private applyBuildingOffset(
+    coords: [number, number][],
+    ox: number,
+    oy: number,
+  ): [number, number][] {
+    if (ox === 0 && oy === 0) return coords;
+    const latShift = oy / 111320;
+    return coords.map(([lat, lng]) => {
+      const lngShift = ox / (111320 * Math.cos(lat * (Math.PI / 180)));
+      return [lat + latShift, lng + lngShift] as [number, number];
+    });
   }
 
   private recomputeAllFovs(): void {
@@ -351,6 +428,47 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     ) {
       return computeSimpleFov(camera);
     }
-    return computeVisibilityFov(camera, this.cachedBuildings);
+    const ox = this.buildingService.offsetX();
+    const oy = this.buildingService.offsetY();
+    const offsetBuildings =
+      ox === 0 && oy === 0
+        ? this.cachedBuildings
+        : this.cachedBuildings.map((b) => ({
+            ...b,
+            coords: this.applyBuildingOffset(b.coords, ox, oy),
+          }));
+    return computeVisibilityFov(camera, offsetBuildings);
+  }
+}
+
+// Bing Maps uses quadkey tile addressing instead of {z}/{x}/{y}
+class BingTileLayer extends L.TileLayer {
+  constructor(apiKey: string) {
+    super(
+      `https://ecn.t{s}.tiles.virtualearth.net/tiles/a{q}.jpeg?g=14205&key=${apiKey}`,
+      {
+        attribution: '&copy; Microsoft',
+        subdomains: ['0', '1', '2', '3'],
+        maxNativeZoom: 19,
+        maxZoom: 22,
+      },
+    );
+  }
+
+  override getTileUrl(coords: L.Coords): string {
+    const quadkey = this.toQuadKey(coords.x, coords.y, coords.z);
+    return super.getTileUrl(coords).replace('{q}', quadkey);
+  }
+
+  private toQuadKey(x: number, y: number, z: number): string {
+    let key = '';
+    for (let i = z; i > 0; i--) {
+      let digit = 0;
+      const mask = 1 << (i - 1);
+      if ((x & mask) !== 0) digit += 1;
+      if ((y & mask) !== 0) digit += 2;
+      key += digit;
+    }
+    return key;
   }
 }
