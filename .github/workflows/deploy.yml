@@ -1,0 +1,52 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Generate config.json
+        run: |
+          cat > public/config.json <<EOF
+          {
+            "googleApiKey": "${{ secrets.GOOGLE_API_KEY }}",
+            "mapboxToken": "${{ secrets.MAPBOX_TOKEN }}",
+            "bingApiKey": "${{ secrets.BING_API_KEY }}"
+          }
+          EOF
+
+      - run: npx ng build --configuration production
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/camera-placement-map/browser
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

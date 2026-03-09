@@ -63,7 +63,7 @@ Esri satellite and OpenStreetMap street tiles are available by default. Addition
 
 Keys can be provided in three ways (highest priority first):
 1. **Per-user** — enter in the Settings section of the sidebar (stored in browser localStorage)
-2. **Server-wide** — set Docker env vars (`GOOGLE_API_KEY`, `MAPBOX_TOKEN`, `BING_API_KEY`) so all users get them
+2. **Server-wide** — set Docker env vars or GitHub Actions secrets (`GOOGLE_API_KEY`, `MAPBOX_TOKEN`, `BING_API_KEY`)
 3. **Static config** — edit `public/config.json` before building
 
 ## Data Sources
