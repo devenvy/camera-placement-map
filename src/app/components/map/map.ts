@@ -8,6 +8,7 @@ import {
   effect,
   untracked,
   NgZone,
+  ChangeDetectionStrategy,
 } from '@angular/core';
 import * as L from 'leaflet';
 import { GeoSearchControl, OpenStreetMapProvider } from 'leaflet-geosearch';
@@ -31,6 +32,7 @@ const FOV_SELECTED_COLOR = '#facc15';
 @Component({
   selector: 'app-map',
   templateUrl: './map.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './map.css',
 })
 export class MapComponent implements AfterViewInit, OnDestroy {
