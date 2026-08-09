@@ -1,11 +1,37 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
+# Dependabot configuration
 # https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 
 version: 2
 updates:
-  - package-ecosystem: "npm" # See documentation for possible values
-    directory: "/" # Location of package manifests
+  - package-ecosystem: "npm"
+    directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      # Angular's packages must move in lockstep, and TypeScript is peer-pinned
+      # by the Angular compiler. Keep them in one PR (including majors) so we
+      # never get a single @angular/* package bumped on its own.
+      angular:
+        patterns:
+          - "@angular/*"
+          - "@angular-devkit/*"
+          - "typescript"
+      # Everything else: bundle minor + patch bumps into one PR per dependency
+      # class. Majors still open individually so they get a deliberate review.
+      dev-dependencies:
+        dependency-type: "development"
+        exclude-patterns:
+          - "@angular/*"
+          - "@angular-devkit/*"
+          - "typescript"
+        update-types:
+          - "minor"
+          - "patch"
+      production-dependencies:
+        dependency-type: "production"
+        exclude-patterns:
+          - "@angular/*"
+        update-types:
+          - "minor"
+          - "patch"
