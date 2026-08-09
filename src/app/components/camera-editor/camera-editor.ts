@@ -1,10 +1,11 @@
-import { Component, inject, input } from '@angular/core';
+import { Component, inject, input, ChangeDetectionStrategy } from '@angular/core';
 import { Camera } from '../../models/camera.model';
 import { CameraService } from '../../services/camera.service';
 
 @Component({
   selector: 'app-camera-editor',
   templateUrl: './camera-editor.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './camera-editor.css',
 })
 export class CameraEditorComponent {

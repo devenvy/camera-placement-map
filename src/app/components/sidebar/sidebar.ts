@@ -1,4 +1,4 @@
-import { Component, inject, input, signal } from '@angular/core';
+import { Component, inject, input, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CameraService } from '../../services/camera.service';
 import { BuildingService } from '../../services/building.service';
 import { SettingsService } from '../../services/settings.service';
@@ -9,6 +9,7 @@ import { MapComponent } from '../map/map';
   selector: 'app-sidebar',
   imports: [CameraEditorComponent],
   templateUrl: './sidebar.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './sidebar.css',
 })
 export class SidebarComponent {
