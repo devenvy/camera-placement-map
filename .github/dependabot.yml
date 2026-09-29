@@ -7,31 +7,25 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
+    ignore:
+      # The Angular compiler peer-pins TypeScript to a single minor
+      # (e.g. ">=6.0 <6.1"). Only take patches here; minor/major TS bumps
+      # come in via `ng update` when Angular widens its supported range.
+      - dependency-name: "typescript"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
     groups:
-      # Angular's packages must move in lockstep, and TypeScript is peer-pinned
-      # by the Angular compiler. Keep them in one PR (including majors) so we
-      # never get a single @angular/* package bumped on its own.
-      angular:
+      # One PR per week for every version update (direct deps, all update
+      # types). Build + test locally before merging, since majors land here.
+      all-dependencies:
+        applies-to: version-updates
         patterns:
-          - "@angular/*"
-          - "@angular-devkit/*"
-          - "typescript"
-      # Everything else: bundle minor + patch bumps into one PR per dependency
-      # class. Majors still open individually so they get a deliberate review.
-      dev-dependencies:
-        dependency-type: "development"
-        exclude-patterns:
-          - "@angular/*"
-          - "@angular-devkit/*"
-          - "typescript"
-        update-types:
-          - "minor"
-          - "patch"
-      production-dependencies:
-        dependency-type: "production"
-        exclude-patterns:
-          - "@angular/*"
-        update-types:
-          - "minor"
-          - "patch"
+          - "*"
+      # Security updates (incl. transitive deps) don't use version-update
+      # groups, so bundle them separately instead of one PR per package.
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
