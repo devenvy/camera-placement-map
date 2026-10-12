@@ -4,5 +4,5 @@ export default createConfig({
   rootDir: import.meta.dirname,
   env: 'browser',
   vitest: true,
-  angular: { prefix: 'app' },
+  angular: { prefix: 'cpm' },
 });

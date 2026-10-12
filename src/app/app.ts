@@ -4,7 +4,7 @@ import { MapComponent } from './components/map/map';
 import { SidebarComponent } from './components/sidebar/sidebar';
 
 @Component({
-  selector: 'app-root',
+  selector: 'cpm-root',
   imports: [MapComponent, SidebarComponent],
   templateUrl: './app.html',
   styleUrl: './app.css',

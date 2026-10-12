@@ -123,7 +123,7 @@ describe('SidebarComponent', () => {
       expect(rowAt(0).textContent).toContain('Camera 1');
       expect(rowAt(0).textContent).toContain('FOV: 60');
       // New camera is selected, so the editor is shown
-      expect(root().querySelector('app-camera-editor')).not.toBeNull();
+      expect(root().querySelector('cpm-camera-editor')).not.toBeNull();
       expect(rowAt(0).classList).toContain('bg-gray-700');
     });
 

@@ -49,8 +49,8 @@ describe('App', () => {
     await fixture.whenStable();
     const root = fixture.nativeElement as HTMLElement;
 
-    expect(root.querySelector('app-sidebar')).not.toBeNull();
-    expect(root.querySelector('app-map .leaflet-container')).not.toBeNull();
+    expect(root.querySelector('cpm-sidebar')).not.toBeNull();
+    expect(root.querySelector('cpm-map .leaflet-container')).not.toBeNull();
 
     const addButton = Array.from(root.querySelectorAll('button')).find(
       (b) => b.textContent.trim() === '+ Add',

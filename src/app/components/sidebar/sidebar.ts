@@ -10,7 +10,7 @@ import type { MapComponent } from '../map/map';
 const ISO_DATE_LENGTH = 10; // YYYY-MM-DD
 
 @Component({
-  selector: 'app-sidebar',
+  selector: 'cpm-sidebar',
   imports: [CameraEditorComponent],
   templateUrl: './sidebar.html',
   styleUrl: './sidebar.css',

@@ -5,7 +5,7 @@ import { CameraService } from '../../services/camera.service';
 import type { Camera } from '../../models/camera.model';
 
 @Component({
-  selector: 'app-camera-editor',
+  selector: 'cpm-camera-editor',
   templateUrl: './camera-editor.html',
   styleUrl: './camera-editor.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

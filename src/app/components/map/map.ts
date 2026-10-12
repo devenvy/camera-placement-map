@@ -43,7 +43,7 @@ const DEGREES_PER_HALF_TURN = 180;
 const DEG_TO_RAD = Math.PI / DEGREES_PER_HALF_TURN;
 
 @Component({
-  selector: 'app-map',
+  selector: 'cpm-map',
   templateUrl: './map.html',
   styleUrl: './map.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
