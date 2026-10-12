@@ -6,10 +6,16 @@
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "test:ci": "ng test --watch=false",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "ngc -p tsconfig.app.json --noEmit && tsc -p tsconfig.spec.json --noEmit",
+    "guidelines:check": "code-guidelines check"
   },
   "private": true,
-  "packageManager": "npm@11.6.2",
+  "packageManager": "pnpm@12.11.2",
   "dependencies": {
     "@angular/common": "^22.2.0",
     "@angular/compiler": "^22.2.0",
@@ -26,13 +32,23 @@
     "@angular/build": "^22.2.0",
     "@angular/cli": "^22.2.0",
     "@angular/compiler-cli": "^22.2.0",
+    "@devenvy/code-guidelines": "file:D:/Source/.code-guidelines-local/devenvy-code-guidelines-0.0.0.tgz",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/leaflet": "^1.9.22",
+    "angular-eslint": "^22.6.0",
+    "eslint": "^10.12.0",
     "jsdom": "^30.1.1",
     "postcss": "^8.5.28",
-    "prettier": "^3.9.9",
+    "prettier": "^3.9.10",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.3",
     "vitest": "^5.0.2"
+  },
+  "prettier": "@devenvy/code-guidelines/prettier/angular",
+  "codeGuidelines": {
+    "env": "browser",
+    "typescript": true,
+    "angular": true,
+    "vitest": true
   }
 }
