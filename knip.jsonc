@@ -1,0 +1,6 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  // knip's Tailwind plugin makes .css files part of the project, but knip does not follow
+  // Angular's styleUrl, so component stylesheets would be reported as unused
+  "entry": ["src/**/*.css"],
+}
