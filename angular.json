@@ -83,10 +83,10 @@
           "options": {
             "coverageReporters": ["text-summary", "json-summary", "json", "html"],
             "coverageThresholds": {
-              "statements": 17,
-              "branches": 16,
-              "functions": 8,
-              "lines": 17
+              "statements": 85,
+              "branches": 85,
+              "functions": 85,
+              "lines": 85
             }
           }
         }
