@@ -8,6 +8,6 @@ import { SidebarComponent } from './components/sidebar/sidebar';
   imports: [MapComponent, SidebarComponent],
   templateUrl: './app.html',
   styleUrl: './app.css',
-  changeDetection: ChangeDetectionStrategy.Eager,
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class App {}

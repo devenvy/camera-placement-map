@@ -11,9 +11,20 @@ interface Segment {
   b: Point2D;
 }
 
-const DEG_TO_RAD = Math.PI / 180;
+const DEGREES_PER_HALF_TURN = 180;
+const DEG_TO_RAD = Math.PI / DEGREES_PER_HALF_TURN;
 const R_EARTH = 6371000;
-const TWO_PI = 2 * Math.PI;
+const TWO_PI = 6.283185307179586; // 2 * Math.PI
+const HALF = 0.5;
+
+// Numeric tolerances
+const ANGLE_EPSILON_RAD = 1e-9;
+const PARALLEL_EPSILON = 1e-10;
+const INTERSECT_EPSILON = 1e-9;
+
+const RANGE_PAD_FACTOR = 1.5;
+const MIN_SEGMENT_LENGTH_M = 0.01;
+const MIN_VERTEX_DISTANCE_M = 0.01;
 
 // --- Coordinate projection (equirectangular, accurate at <500m) ---
 
@@ -46,7 +57,7 @@ function normalizeRadPositive(rad: number): number {
 function isAngleInArc(angle: number, startRad: number, endRad: number): boolean {
   const span = normalizeRadPositive(endRad - startRad);
   const test = normalizeRadPositive(angle - startRad);
-  return test <= span + 1e-9;
+  return test <= span + ANGLE_EPSILON_RAD;
 }
 
 // --- Ray-segment intersection ---
@@ -65,14 +76,14 @@ export function raySegmentIntersect(
   const ey = by - ay;
   const denom = dx * ey - dy * ex;
 
-  if (Math.abs(denom) < 1e-10) {
+  if (Math.abs(denom) < PARALLEL_EPSILON) {
     return null;
   }
 
   const t = ((ax - ox) * ey - (ay - oy) * ex) / denom;
   const u = ((ax - ox) * dy - (ay - oy) * dx) / denom;
 
-  if (t < 1e-9 || u < -1e-9 || u > 1 + 1e-9) {
+  if (t < INTERSECT_EPSILON || u < -INTERSECT_EPSILON || u > 1 + INTERSECT_EPSILON) {
     return null;
   }
 
@@ -86,7 +97,7 @@ export function computeSimpleFov(camera: Camera): [number, number][] {
   const points: [number, number][] = [[lat, lng]];
 
   const segments = 32;
-  const startAngle = heading - fov / 2;
+  const startAngle = heading - fov * HALF;
   const step = fov / segments;
 
   for (let i = 0; i <= segments; i++) {
@@ -108,38 +119,35 @@ export function computeVisibilityFov(
   buildings: BuildingPolygon[],
 ): [number, number][] {
   const { lat, lng, heading, fov, range } = camera;
-  const halfFovRad = degToRad(fov / 2);
+  const halfFovRad = degToRad(fov * HALF);
   const centerRad = degToRad(heading);
   const startRad = centerRad - halfFovRad;
   const endRad = centerRad + halfFovRad;
 
   // Step 1: Convert buildings to local coords, collect segments
   const segments: Segment[] = [];
-  const rangePad = range * 1.5;
+  const rangePad = range * RANGE_PAD_FACTOR;
 
   for (const building of buildings) {
     const localCoords = building.coords.map(([bLat, bLng]) => toLocal(bLat, bLng, lat, lng));
 
     // Quick reject: skip buildings entirely outside range
-    let anyInRange = false;
-    for (const p of localCoords) {
-      if (Math.abs(p.x) <= rangePad && Math.abs(p.y) <= rangePad) {
-        anyInRange = true;
-        break;
+    const anyInRange = localCoords.some(
+      (p) => Math.abs(p.x) <= rangePad && Math.abs(p.y) <= rangePad,
+    );
+    if (anyInRange) {
+      for (let i = 0; i < localCoords.length - 1; i++) {
+        const a = localCoords[i];
+        const b = localCoords[i + 1];
+        // Skip degenerate (zero-length) segments
+        if (
+          a !== undefined &&
+          b !== undefined &&
+          Math.hypot(b.x - a.x, b.y - a.y) >= MIN_SEGMENT_LENGTH_M
+        ) {
+          segments.push({ a, b });
+        }
       }
-    }
-    if (!anyInRange) {
-      continue;
-    }
-
-    for (let i = 0; i < localCoords.length - 1; i++) {
-      const a = localCoords[i];
-      const b = localCoords[i + 1];
-      const segLen = Math.hypot(b.x - a.x, b.y - a.y);
-      if (segLen < 0.01) {
-        continue;
-      }
-      segments.push({ a, b });
     }
   }
 
@@ -165,15 +173,13 @@ export function computeVisibilityFov(
   for (const seg of segments) {
     for (const vertex of [seg.a, seg.b]) {
       const dist = Math.hypot(vertex.x, vertex.y);
-      if (dist > rangePad || dist < 0.01) {
-        continue;
-      }
-
-      const vertexAngle = Math.atan2(vertex.x, vertex.y);
-      if (isAngleInArc(vertexAngle, startPadded, endPadded)) {
-        angles.push(vertexAngle - EPSILON);
-        angles.push(vertexAngle);
-        angles.push(vertexAngle + EPSILON);
+      if (dist <= rangePad && dist >= MIN_VERTEX_DISTANCE_M) {
+        const vertexAngle = Math.atan2(vertex.x, vertex.y);
+        if (isAngleInArc(vertexAngle, startPadded, endPadded)) {
+          angles.push(vertexAngle - EPSILON);
+          angles.push(vertexAngle);
+          angles.push(vertexAngle + EPSILON);
+        }
       }
     }
   }
@@ -185,10 +191,8 @@ export function computeVisibilityFov(
 
   const deduped: number[] = [];
   for (const angle of filtered) {
-    if (
-      deduped.length === 0 ||
-      Math.abs(normalizeRadPositive(angle - deduped[deduped.length - 1])) > EPSILON / 2
-    ) {
+    const last = deduped.at(-1);
+    if (last === undefined || Math.abs(normalizeRadPositive(angle - last)) > EPSILON * HALF) {
       deduped.push(angle);
     }
   }

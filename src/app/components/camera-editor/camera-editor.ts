@@ -8,7 +8,7 @@ import type { Camera } from '../../models/camera.model';
   selector: 'app-camera-editor',
   templateUrl: './camera-editor.html',
   styleUrl: './camera-editor.css',
-  changeDetection: ChangeDetectionStrategy.Eager,
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CameraEditorComponent {
   private readonly cameraService = inject(CameraService);
@@ -25,17 +25,17 @@ export class CameraEditorComponent {
   }
 
   protected updateHeading(event: Event): void {
-    const value = +(event.target as HTMLInputElement).value;
+    const value = Number((event.target as HTMLInputElement).value);
     this.cameraService.updateCamera(this.camera().id, { heading: value });
   }
 
   protected updateFov(event: Event): void {
-    const value = +(event.target as HTMLInputElement).value;
+    const value = Number((event.target as HTMLInputElement).value);
     this.cameraService.updateCamera(this.camera().id, { fov: value });
   }
 
   protected updateRange(event: Event): void {
-    const value = +(event.target as HTMLInputElement).value;
+    const value = Number((event.target as HTMLInputElement).value);
     this.cameraService.updateCamera(this.camera().id, { range: value });
   }
 }

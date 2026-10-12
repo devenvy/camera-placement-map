@@ -3,49 +3,54 @@ import { computed, effect, Injectable, signal } from '@angular/core';
 import { type Camera, type CameraExport, createCamera } from '../models/camera.model';
 
 const STORAGE_KEY = 'camera-placement-map-cameras';
+const JSON_INDENT = 2;
+
+function saveToStorage(cameras: Camera[]): void {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(cameras));
+}
 
 @Injectable({ providedIn: 'root' })
 export class CameraService {
-  private readonly _cameras = signal<Camera[]>([]);
-  private _nextIndex = 1;
+  readonly #cameras = signal<Camera[]>([]);
+  private nextIndex = 1;
 
-  readonly cameras = this._cameras.asReadonly();
+  readonly cameras = this.#cameras.asReadonly();
 
-  private readonly _selectedId = signal<string | null>(null);
-  readonly selectedId = this._selectedId.asReadonly();
+  readonly #selectedId = signal<string | null>(null);
+  readonly selectedId = this.#selectedId.asReadonly();
   readonly selectedCamera = computed(() => {
-    const id = this._selectedId();
-    return this._cameras().find((c) => c.id === id) ?? null;
+    const id = this.#selectedId();
+    return this.#cameras().find((c) => c.id === id) ?? null;
   });
 
   constructor() {
     this.loadFromStorage();
     effect(() => {
-      const cameras = this._cameras();
-      this.saveToStorage(cameras);
+      const cameras = this.#cameras();
+      saveToStorage(cameras);
     });
   }
 
   addCamera(lat: number, lng: number): Camera {
-    const camera = createCamera(lat, lng, this._nextIndex++);
-    this._cameras.update((prev) => [...prev, camera]);
-    this._selectedId.set(camera.id);
+    const camera = createCamera(lat, lng, this.nextIndex++);
+    this.#cameras.update((prev) => [...prev, camera]);
+    this.#selectedId.set(camera.id);
     return camera;
   }
 
   updateCamera(id: string, changes: Partial<Omit<Camera, 'id'>>): void {
-    this._cameras.update((prev) => prev.map((c) => (c.id === id ? { ...c, ...changes } : c)));
+    this.#cameras.update((prev) => prev.map((c) => (c.id === id ? { ...c, ...changes } : c)));
   }
 
   deleteCamera(id: string): void {
-    this._cameras.update((prev) => prev.filter((c) => c.id !== id));
-    if (this._selectedId() === id) {
-      this._selectedId.set(null);
+    this.#cameras.update((prev) => prev.filter((c) => c.id !== id));
+    if (this.#selectedId() === id) {
+      this.#selectedId.set(null);
     }
   }
 
   cloneCamera(id: string): Camera | null {
-    const source = this._cameras().find((c) => c.id === id);
+    const source = this.#cameras().find((c) => c.id === id);
     if (!source) {
       return null;
     }
@@ -54,22 +59,22 @@ export class CameraService {
       id: crypto.randomUUID(),
       name: `${source.name} (copy)`,
     };
-    this._cameras.update((prev) => [...prev, clone]);
-    this._selectedId.set(clone.id);
+    this.#cameras.update((prev) => [...prev, clone]);
+    this.#selectedId.set(clone.id);
     return clone;
   }
 
   selectCamera(id: string | null): void {
-    this._selectedId.set(id);
+    this.#selectedId.set(id);
   }
 
   exportToJson(): string {
     const data: CameraExport = {
       version: 1,
-      cameras: this._cameras(),
+      cameras: this.#cameras(),
       exportedAt: new Date().toISOString(),
     };
-    return JSON.stringify(data, null, 2);
+    return JSON.stringify(data, null, JSON_INDENT);
   }
 
   importFromJson(json: string): {
@@ -78,8 +83,11 @@ export class CameraService {
     error?: string;
   } {
     try {
-      const data = JSON.parse(json);
-      const cameras: unknown[] = Array.isArray(data) ? data : data?.cameras;
+      const data: unknown = JSON.parse(json);
+      const cameras: unknown =
+        Array.isArray(data) || typeof data !== 'object' || data === null || !('cameras' in data)
+          ? data
+          : data.cameras;
       if (!Array.isArray(cameras)) {
         return {
           success: false,
@@ -87,7 +95,8 @@ export class CameraService {
           error: 'Invalid format: expected cameras array',
         };
       }
-      const validated = cameras.filter(
+      const entries: unknown[] = cameras;
+      const validated = entries.filter(
         (c): c is Camera =>
           typeof c === 'object' &&
           c !== null &&
@@ -102,11 +111,11 @@ export class CameraService {
           cam.id = crypto.randomUUID();
         }
         if (!cam.name) {
-          cam.name = `Camera ${this._nextIndex++}`;
+          cam.name = `Camera ${this.nextIndex++}`;
         }
       }
-      this._cameras.set(validated);
-      this._selectedId.set(null);
+      this.#cameras.set(validated);
+      this.#selectedId.set(null);
       return { success: true, count: validated.length };
     } catch {
       return { success: false, count: 0, error: 'Invalid JSON' };
@@ -119,21 +128,18 @@ export class CameraService {
       if (!raw) {
         return;
       }
-      const cameras = JSON.parse(raw);
-      if (Array.isArray(cameras)) {
-        this._cameras.set(cameras);
-        const maxIndex = cameras.reduce((max: number, c: Camera) => {
-          const match = c.name.match(/Camera (\d+)/);
-          return match ? Math.max(max, parseInt(match[1], 10)) : max;
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const cameras = parsed as Camera[];
+        this.#cameras.set(cameras);
+        const maxIndex = cameras.reduce((max, c) => {
+          const digits = c.name.match(/Camera (\d+)/)?.[1];
+          return digits ? Math.max(max, parseInt(digits, 10)) : max;
         }, 0);
-        this._nextIndex = maxIndex + 1;
+        this.nextIndex = maxIndex + 1;
       }
     } catch {
       // Ignore corrupt storage
     }
-  }
-
-  private saveToStorage(cameras: Camera[]): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cameras));
   }
 }

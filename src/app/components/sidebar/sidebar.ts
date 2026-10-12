@@ -7,12 +7,14 @@ import { CameraEditorComponent } from '../camera-editor/camera-editor';
 
 import type { MapComponent } from '../map/map';
 
+const ISO_DATE_LENGTH = 10; // YYYY-MM-DD
+
 @Component({
   selector: 'app-sidebar',
   imports: [CameraEditorComponent],
   templateUrl: './sidebar.html',
   styleUrl: './sidebar.css',
-  changeDetection: ChangeDetectionStrategy.Eager,
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SidebarComponent {
   protected cameraService = inject(CameraService);
@@ -36,6 +38,17 @@ export class SidebarComponent {
     this.cameraService.selectCamera(id);
   }
 
+  protected onCameraKeydown(id: string, event: KeyboardEvent): void {
+    // Ignore key events bubbling up from the nested Delete button
+    if (event.target !== event.currentTarget) {
+      return;
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this.selectCamera(id);
+    }
+  }
+
   protected deleteCamera(id: string, event: Event): void {
     event.stopPropagation();
     this.cameraService.deleteCamera(id);
@@ -47,7 +60,7 @@ export class SidebarComponent {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `cameras-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `cameras-${new Date().toISOString().slice(0, ISO_DATE_LENGTH)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -57,18 +70,18 @@ export class SidebarComponent {
   }
 
   protected updateSearchRadius(event: Event): void {
-    const value = +(event.target as HTMLInputElement).value;
+    const value = Number((event.target as HTMLInputElement).value);
     if (value > 0) {
       this.buildingService.setSearchRadius(value);
     }
   }
 
   protected updateOffsetX(event: Event): void {
-    this.buildingService.setOffsetX(+(event.target as HTMLInputElement).value);
+    this.buildingService.setOffsetX(Number((event.target as HTMLInputElement).value));
   }
 
   protected updateOffsetY(event: Event): void {
-    this.buildingService.setOffsetY(+(event.target as HTMLInputElement).value);
+    this.buildingService.setOffsetY(Number((event.target as HTMLInputElement).value));
   }
 
   protected toggleSettings(): void {
@@ -87,12 +100,14 @@ export class SidebarComponent {
       case 'bing':
         this.settingsService.setBingApiKey(value);
         break;
+      default:
+        break;
     }
   }
 
   protected importCameras(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
+    const fileInput = event.target as HTMLInputElement;
+    const file = fileInput.files?.[0];
     if (!file) {
       return;
     }
@@ -100,10 +115,11 @@ export class SidebarComponent {
     reader.onload = () => {
       const result = this.cameraService.importFromJson(reader.result as string);
       if (!result.success) {
-        alert(`Import failed: ${result.error}`);
+        // eslint-disable-next-line no-alert -- simple blocking error prompt; the app has no in-app notification UI
+        alert(`Import failed: ${result.error ?? 'unknown error'}`);
       }
     };
     reader.readAsText(file);
-    input.value = '';
+    fileInput.value = '';
   }
 }
