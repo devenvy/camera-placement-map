@@ -1,28 +1,24 @@
 import {
-  Component,
-  AfterViewInit,
-  OnDestroy,
-  ViewChild,
-  ElementRef,
-  inject,
-  effect,
-  untracked,
-  NgZone,
+  type AfterViewInit,
   ChangeDetectionStrategy,
+  Component,
+  effect,
+  type ElementRef,
+  inject,
+  NgZone,
+  type OnDestroy,
+  untracked,
+  ViewChild,
 } from '@angular/core';
 import * as L from 'leaflet';
 import { GeoSearchControl, OpenStreetMapProvider } from 'leaflet-geosearch';
-import { Camera } from '../../models/camera.model';
+
+import { type BuildingPolygon, BuildingService } from '../../services/building.service';
 import { CameraService } from '../../services/camera.service';
-import {
-  BuildingService,
-  BuildingPolygon,
-} from '../../services/building.service';
 import { SettingsService } from '../../services/settings.service';
-import {
-  computeSimpleFov,
-  computeVisibilityFov,
-} from '../../utils/visibility';
+import { computeSimpleFov, computeVisibilityFov } from '../../utils/visibility';
+
+import type { Camera } from '../../models/camera.model';
 
 const CAMERA_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`;
 
@@ -32,24 +28,21 @@ const FOV_SELECTED_COLOR = '#facc15';
 @Component({
   selector: 'app-map',
   templateUrl: './map.html',
-  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './map.css',
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 export class MapComponent implements AfterViewInit, OnDestroy {
   @ViewChild('mapContainer', { static: true })
   mapContainer!: ElementRef<HTMLDivElement>;
 
-  private cameraService = inject(CameraService);
-  private buildingService = inject(BuildingService);
-  private settingsService = inject(SettingsService);
-  private zone = inject(NgZone);
+  private readonly cameraService = inject(CameraService);
+  private readonly buildingService = inject(BuildingService);
+  private readonly settingsService = inject(SettingsService);
+  private readonly zone = inject(NgZone);
   private map!: L.Map;
-  private cameraLayers = new Map<
-    string,
-    { marker: L.Marker; fov: L.Polygon }
-  >();
+  private readonly cameraLayers = new Map<string, { marker: L.Marker; fov: L.Polygon }>();
   private resizeObserver?: ResizeObserver;
-  private buildingLayer = L.layerGroup();
+  private readonly buildingLayer = L.layerGroup();
   private cachedBuildings: BuildingPolygon[] = [];
   private layerControl?: L.Control.Layers;
 
@@ -182,14 +175,11 @@ export class MapComponent implements AfterViewInit, OnDestroy {
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
         { attribution: 'Tiles &copy; Esri', maxNativeZoom: 19, maxZoom: 22 },
       ),
-      Street: L.tileLayer(
-        'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        {
-          attribution: '&copy; OpenStreetMap contributors',
-          maxNativeZoom: 19,
-          maxZoom: 22,
-        },
-      ),
+      Street: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxNativeZoom: 19,
+        maxZoom: 22,
+      }),
     };
 
     const googleKey = this.settingsService.googleApiKey();
@@ -258,15 +248,10 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       const pos = (e.target as L.Marker).getLatLng();
       const fovLayer = this.cameraLayers.get(camera.id)?.fov;
       if (fovLayer) {
-        const current = this.cameraService
-          .cameras()
-          .find((c) => c.id === camera.id);
+        const current = this.cameraService.cameras().find((c) => c.id === camera.id);
         if (current) {
           fovLayer.setLatLngs(
-            this.computeFovForCamera(
-              { ...current, lat: pos.lat, lng: pos.lng },
-              true,
-            ),
+            this.computeFovForCamera({ ...current, lat: pos.lat, lng: pos.lng }, true),
           );
         }
       }
@@ -341,24 +326,20 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   }
 
   private flyToCamera(selectedId: string | null): void {
-    if (!selectedId) return;
-    const camera = this.cameraService
-      .cameras()
-      .find((c) => c.id === selectedId);
+    if (!selectedId) {
+      return;
+    }
+    const camera = this.cameraService.cameras().find((c) => c.id === selectedId);
     if (camera) {
-      this.map.flyTo(
-        [camera.lat, camera.lng],
-        Math.max(this.map.getZoom(), 18),
-        { duration: 0.5 },
-      );
+      this.map.flyTo([camera.lat, camera.lng], Math.max(this.map.getZoom(), 18), { duration: 0.5 });
     }
   }
 
   private fitBoundsToAll(cameras: Camera[]): void {
-    if (cameras.length === 0) return;
-    const bounds = L.latLngBounds(
-      cameras.map((c) => [c.lat, c.lng] as L.LatLngTuple),
-    );
+    if (cameras.length === 0) {
+      return;
+    }
+    const bounds = L.latLngBounds(cameras.map((c) => [c.lat, c.lng] as L.LatLngTuple));
     this.map.fitBounds(bounds, { padding: [50, 50], maxZoom: 19 });
   }
 
@@ -370,8 +351,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    const buildings =
-      await this.buildingService.fetchBuildingsAroundCameras(cameras);
+    const buildings = await this.buildingService.fetchBuildingsAroundCameras(cameras);
 
     this.cachedBuildings = buildings;
     this.renderBuildings();
@@ -401,7 +381,9 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     ox: number,
     oy: number,
   ): [number, number][] {
-    if (ox === 0 && oy === 0) return coords;
+    if (ox === 0 && oy === 0) {
+      return coords;
+    }
     const latShift = oy / 111320;
     return coords.map(([lat, lng]) => {
       const lngShift = ox / (111320 * Math.cos(lat * (Math.PI / 180)));
@@ -419,15 +401,8 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  private computeFovForCamera(
-    camera: Camera,
-    useSimple = false,
-  ): L.LatLngExpression[] {
-    if (
-      useSimple ||
-      !this.buildingService.enabled() ||
-      this.cachedBuildings.length === 0
-    ) {
+  private computeFovForCamera(camera: Camera, useSimple = false): L.LatLngExpression[] {
+    if (useSimple || !this.buildingService.enabled() || this.cachedBuildings.length === 0) {
       return computeSimpleFov(camera);
     }
     const ox = this.buildingService.offsetX();
@@ -446,15 +421,12 @@ export class MapComponent implements AfterViewInit, OnDestroy {
 // Bing Maps uses quadkey tile addressing instead of {z}/{x}/{y}
 class BingTileLayer extends L.TileLayer {
   constructor(apiKey: string) {
-    super(
-      `https://ecn.t{s}.tiles.virtualearth.net/tiles/a{q}.jpeg?g=14205&key=${apiKey}`,
-      {
-        attribution: '&copy; Microsoft',
-        subdomains: ['0', '1', '2', '3'],
-        maxNativeZoom: 19,
-        maxZoom: 22,
-      },
-    );
+    super(`https://ecn.t{s}.tiles.virtualearth.net/tiles/a{q}.jpeg?g=14205&key=${apiKey}`, {
+      attribution: '&copy; Microsoft',
+      subdomains: ['0', '1', '2', '3'],
+      maxNativeZoom: 19,
+      maxZoom: 22,
+    });
   }
 
   override getTileUrl(coords: L.Coords): string {
@@ -467,8 +439,12 @@ class BingTileLayer extends L.TileLayer {
     for (let i = z; i > 0; i--) {
       let digit = 0;
       const mask = 1 << (i - 1);
-      if ((x & mask) !== 0) digit += 1;
-      if ((y & mask) !== 0) digit += 2;
+      if ((x & mask) !== 0) {
+        digit += 1;
+      }
+      if ((y & mask) !== 0) {
+        digit += 2;
+      }
       key += digit;
     }
     return key;

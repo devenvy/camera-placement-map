@@ -55,22 +55,23 @@ Build output goes to `dist/`.
 
 Esri satellite and OpenStreetMap street tiles are available by default. Additional providers appear in the layer control when an API key is configured.
 
-| Provider | Key required | How to get one |
-|---|---|---|
+| Provider         | Key required        | How to get one                                            |
+| ---------------- | ------------------- | --------------------------------------------------------- |
 | Google Satellite | Google Maps API key | [Google Cloud Console](https://console.cloud.google.com/) |
-| Mapbox Satellite | Mapbox access token | [Mapbox account](https://account.mapbox.com/) |
-| Bing Aerial | Bing Maps key | [Bing Maps Dev Center](https://www.bingmapsportal.com/) |
+| Mapbox Satellite | Mapbox access token | [Mapbox account](https://account.mapbox.com/)             |
+| Bing Aerial      | Bing Maps key       | [Bing Maps Dev Center](https://www.bingmapsportal.com/)   |
 
 Keys can be provided in three ways (highest priority first):
+
 1. **Per-user** — enter in the Settings section of the sidebar (stored in browser localStorage)
 2. **Server-wide** — set Docker env vars or GitHub Actions secrets (`GOOGLE_API_KEY`, `MAPBOX_TOKEN`, `BING_API_KEY`)
 3. **Static config** — edit `public/config.json` before building
 
 ## Data Sources
 
-| Source | Used for |
-|---|---|
-| [Esri World Imagery](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9) | Satellite tiles (default) |
-| [OpenStreetMap](https://www.openstreetmap.org/) | Street tiles |
-| [Nominatim](https://nominatim.openstreetmap.org/) | Address search (geocoding) |
-| [Overpass API](https://overpass-api.de/) | Building footprints for FOV occlusion |
+| Source                                                                                          | Used for                              |
+| ----------------------------------------------------------------------------------------------- | ------------------------------------- |
+| [Esri World Imagery](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9) | Satellite tiles (default)             |
+| [OpenStreetMap](https://www.openstreetmap.org/)                                                 | Street tiles                          |
+| [Nominatim](https://nominatim.openstreetmap.org/)                                               | Address search (geocoding)            |
+| [Overpass API](https://overpass-api.de/)                                                        | Building footprints for FOV occlusion |

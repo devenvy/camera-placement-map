@@ -1,4 +1,4 @@
-import { Injectable, signal, effect, computed } from '@angular/core';
+import { computed, effect, Injectable, signal } from '@angular/core';
 
 interface AppSettings {
   googleApiKey: string;
@@ -21,25 +21,19 @@ export class SettingsService {
   private readonly _userBingApiKey = signal('');
 
   // Effective keys: user override wins, falls back to server default
-  readonly googleApiKey = computed(
-    () => this._userGoogleApiKey() || this._serverGoogleApiKey(),
-  );
-  readonly mapboxToken = computed(
-    () => this._userMapboxToken() || this._serverMapboxToken(),
-  );
-  readonly bingApiKey = computed(
-    () => this._userBingApiKey() || this._serverBingApiKey(),
-  );
+  readonly googleApiKey = computed(() => this._userGoogleApiKey() || this._serverGoogleApiKey());
+  readonly mapboxToken = computed(() => this._userMapboxToken() || this._serverMapboxToken());
+  readonly bingApiKey = computed(() => this._userBingApiKey() || this._serverBingApiKey());
 
   // Whether each key came from the server (shown as hint in UI)
   readonly googleFromServer = computed(
-    () => !this._userGoogleApiKey() && !!this._serverGoogleApiKey(),
+    () => !this._userGoogleApiKey() && Boolean(this._serverGoogleApiKey()),
   );
   readonly mapboxFromServer = computed(
-    () => !this._userMapboxToken() && !!this._serverMapboxToken(),
+    () => !this._userMapboxToken() && Boolean(this._serverMapboxToken()),
   );
   readonly bingFromServer = computed(
-    () => !this._userBingApiKey() && !!this._serverBingApiKey(),
+    () => !this._userBingApiKey() && Boolean(this._serverBingApiKey()),
   );
 
   constructor() {
@@ -70,7 +64,9 @@ export class SettingsService {
   private loadSettings(): void {
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
-      if (!raw) return;
+      if (!raw) {
+        return;
+      }
       const settings: AppSettings = JSON.parse(raw);
       if (typeof settings.googleApiKey === 'string') {
         this._userGoogleApiKey.set(settings.googleApiKey);
@@ -89,7 +85,9 @@ export class SettingsService {
   private async loadServerConfig(): Promise<void> {
     try {
       const response = await fetch('config.json');
-      if (!response.ok) return;
+      if (!response.ok) {
+        return;
+      }
       const config: Partial<AppSettings> = await response.json();
       if (config.googleApiKey) {
         this._serverGoogleApiKey.set(config.googleApiKey);

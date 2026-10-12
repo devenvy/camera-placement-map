@@ -1,11 +1,9 @@
 <div class="px-4 py-3 border-t border-gray-700">
   <div class="flex items-center justify-between mb-3">
-    <h3 class="text-xs font-semibold uppercase tracking-wider text-gray-400">
-      Edit Camera
-    </h3>
+    <h3 class="text-xs font-semibold uppercase tracking-wider text-gray-400">Edit Camera</h3>
     <button
-      (click)="cloneCamera()"
       class="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+      (click)="cloneCamera()"
     >
       Clone
     </button>
@@ -15,9 +13,9 @@
     <span class="text-xs text-gray-500">Name</span>
     <input
       type="text"
+      class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm mt-0.5 focus:border-sky-500 focus:outline-none"
       [value]="camera().name"
       (change)="updateName($event)"
-      class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm mt-0.5 focus:border-sky-500 focus:outline-none"
     />
   </div>
 
@@ -30,9 +28,9 @@
           min="0"
           max="360"
           step="1"
+          class="w-12 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-xs text-right focus:border-sky-500 focus:outline-none"
           [value]="camera().heading"
           (change)="updateHeading($event)"
-          class="w-12 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-xs text-right focus:border-sky-500 focus:outline-none"
         />
         <span class="text-xs text-gray-500">&deg;</span>
       </div>
@@ -42,9 +40,9 @@
       min="0"
       max="360"
       step="1"
+      class="w-full"
       [value]="camera().heading"
       (input)="updateHeading($event)"
-      class="w-full"
     />
   </div>
 
@@ -57,9 +55,9 @@
           min="10"
           max="180"
           step="1"
+          class="w-12 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-xs text-right focus:border-sky-500 focus:outline-none"
           [value]="camera().fov"
           (change)="updateFov($event)"
-          class="w-12 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-xs text-right focus:border-sky-500 focus:outline-none"
         />
         <span class="text-xs text-gray-500">&deg;</span>
       </div>
@@ -69,9 +67,9 @@
       min="10"
       max="180"
       step="1"
+      class="w-full"
       [value]="camera().fov"
       (input)="updateFov($event)"
-      class="w-full"
     />
   </div>
 
@@ -84,9 +82,9 @@
           min="5"
           max="500"
           step="5"
+          class="w-12 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-xs text-right focus:border-sky-500 focus:outline-none"
           [value]="camera().range"
           (change)="updateRange($event)"
-          class="w-12 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-xs text-right focus:border-sky-500 focus:outline-none"
         />
         <span class="text-xs text-gray-500">m</span>
       </div>
@@ -96,9 +94,9 @@
       min="5"
       max="500"
       step="5"
+      class="w-full"
       [value]="camera().range"
       (input)="updateRange($event)"
-      class="w-full"
     />
   </div>
 </div>

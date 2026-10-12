@@ -1,5 +1,6 @@
-import { Injectable, signal, computed, effect } from '@angular/core';
-import { Camera, createCamera, CameraExport } from '../models/camera.model';
+import { computed, effect, Injectable, signal } from '@angular/core';
+
+import { type Camera, type CameraExport, createCamera } from '../models/camera.model';
 
 const STORAGE_KEY = 'camera-placement-map-cameras';
 
@@ -33,9 +34,7 @@ export class CameraService {
   }
 
   updateCamera(id: string, changes: Partial<Omit<Camera, 'id'>>): void {
-    this._cameras.update((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, ...changes } : c)),
-    );
+    this._cameras.update((prev) => prev.map((c) => (c.id === id ? { ...c, ...changes } : c)));
   }
 
   deleteCamera(id: string): void {
@@ -47,7 +46,9 @@ export class CameraService {
 
   cloneCamera(id: string): Camera | null {
     const source = this._cameras().find((c) => c.id === id);
-    if (!source) return null;
+    if (!source) {
+      return null;
+    }
     const clone: Camera = {
       ...source,
       id: crypto.randomUUID(),
@@ -97,8 +98,12 @@ export class CameraService {
           typeof (c as Camera).range === 'number',
       );
       for (const cam of validated) {
-        if (!cam.id) cam.id = crypto.randomUUID();
-        if (!cam.name) cam.name = `Camera ${this._nextIndex++}`;
+        if (!cam.id) {
+          cam.id = crypto.randomUUID();
+        }
+        if (!cam.name) {
+          cam.name = `Camera ${this._nextIndex++}`;
+        }
       }
       this._cameras.set(validated);
       this._selectedId.set(null);
@@ -111,7 +116,9 @@ export class CameraService {
   private loadFromStorage(): void {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
+      if (!raw) {
+        return;
+      }
       const cameras = JSON.parse(raw);
       if (Array.isArray(cameras)) {
         this._cameras.set(cameras);

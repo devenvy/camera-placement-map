@@ -1,5 +1,5 @@
-import { Camera } from '../models/camera.model';
-import { BuildingPolygon } from '../services/building.service';
+import type { Camera } from '../models/camera.model';
+import type { BuildingPolygon } from '../services/building.service';
 
 export interface Point2D {
   x: number;
@@ -17,12 +17,7 @@ const TWO_PI = 2 * Math.PI;
 
 // --- Coordinate projection (equirectangular, accurate at <500m) ---
 
-export function toLocal(
-  lat: number,
-  lng: number,
-  originLat: number,
-  originLng: number,
-): Point2D {
+export function toLocal(lat: number, lng: number, originLat: number, originLng: number): Point2D {
   const cosLat = Math.cos(originLat * DEG_TO_RAD);
   return {
     x: (lng - originLng) * DEG_TO_RAD * R_EARTH * cosLat,
@@ -30,11 +25,7 @@ export function toLocal(
   };
 }
 
-export function toLatLng(
-  point: Point2D,
-  originLat: number,
-  originLng: number,
-): [number, number] {
+export function toLatLng(point: Point2D, originLat: number, originLng: number): [number, number] {
   const cosLat = Math.cos(originLat * DEG_TO_RAD);
   const lat = originLat + point.y / (R_EARTH * DEG_TO_RAD);
   const lng = originLng + point.x / (R_EARTH * cosLat * DEG_TO_RAD);
@@ -52,11 +43,7 @@ function normalizeRadPositive(rad: number): number {
   return ((rad % TWO_PI) + TWO_PI) % TWO_PI;
 }
 
-function isAngleInArc(
-  angle: number,
-  startRad: number,
-  endRad: number,
-): boolean {
+function isAngleInArc(angle: number, startRad: number, endRad: number): boolean {
   const span = normalizeRadPositive(endRad - startRad);
   const test = normalizeRadPositive(angle - startRad);
   return test <= span + 1e-9;
@@ -78,12 +65,16 @@ export function raySegmentIntersect(
   const ey = by - ay;
   const denom = dx * ey - dy * ex;
 
-  if (Math.abs(denom) < 1e-10) return null;
+  if (Math.abs(denom) < 1e-10) {
+    return null;
+  }
 
   const t = ((ax - ox) * ey - (ay - oy) * ex) / denom;
   const u = ((ax - ox) * dy - (ay - oy) * dx) / denom;
 
-  if (t < 1e-9 || u < -1e-9 || u > 1 + 1e-9) return null;
+  if (t < 1e-9 || u < -1e-9 || u > 1 + 1e-9) {
+    return null;
+  }
 
   return t;
 }
@@ -127,9 +118,7 @@ export function computeVisibilityFov(
   const rangePad = range * 1.5;
 
   for (const building of buildings) {
-    const localCoords = building.coords.map(([bLat, bLng]) =>
-      toLocal(bLat, bLng, lat, lng),
-    );
+    const localCoords = building.coords.map(([bLat, bLng]) => toLocal(bLat, bLng, lat, lng));
 
     // Quick reject: skip buildings entirely outside range
     let anyInRange = false;
@@ -139,13 +128,17 @@ export function computeVisibilityFov(
         break;
       }
     }
-    if (!anyInRange) continue;
+    if (!anyInRange) {
+      continue;
+    }
 
     for (let i = 0; i < localCoords.length - 1; i++) {
       const a = localCoords[i];
       const b = localCoords[i + 1];
       const segLen = Math.hypot(b.x - a.x, b.y - a.y);
-      if (segLen < 0.01) continue;
+      if (segLen < 0.01) {
+        continue;
+      }
       segments.push({ a, b });
     }
   }
@@ -172,7 +165,9 @@ export function computeVisibilityFov(
   for (const seg of segments) {
     for (const vertex of [seg.a, seg.b]) {
       const dist = Math.hypot(vertex.x, vertex.y);
-      if (dist > rangePad || dist < 0.01) continue;
+      if (dist > rangePad || dist < 0.01) {
+        continue;
+      }
 
       const vertexAngle = Math.atan2(vertex.x, vertex.y);
       if (isAngleInArc(vertexAngle, startPadded, endPadded)) {
@@ -186,16 +181,13 @@ export function computeVisibilityFov(
   // Step 3: Filter to FOV, sort, deduplicate
   const filtered = angles.filter((a) => isAngleInArc(a, startRad, endRad));
 
-  filtered.sort((a, b) => {
-    return normalizeRadPositive(a - startRad) - normalizeRadPositive(b - startRad);
-  });
+  filtered.sort((a, b) => normalizeRadPositive(a - startRad) - normalizeRadPositive(b - startRad));
 
   const deduped: number[] = [];
   for (const angle of filtered) {
     if (
       deduped.length === 0 ||
-      Math.abs(normalizeRadPositive(angle - deduped[deduped.length - 1])) >
-        EPSILON / 2
+      Math.abs(normalizeRadPositive(angle - deduped[deduped.length - 1])) > EPSILON / 2
     ) {
       deduped.push(angle);
     }
@@ -211,16 +203,7 @@ export function computeVisibilityFov(
     let closestT = range;
 
     for (const seg of segments) {
-      const t = raySegmentIntersect(
-        0,
-        0,
-        dx,
-        dy,
-        seg.a.x,
-        seg.a.y,
-        seg.b.x,
-        seg.b.y,
-      );
+      const t = raySegmentIntersect(0, 0, dx, dy, seg.a.x, seg.a.y, seg.b.x, seg.b.y);
       if (t !== null && t < closestT) {
         closestT = t;
       }

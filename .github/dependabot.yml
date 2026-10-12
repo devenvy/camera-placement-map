@@ -3,29 +3,29 @@
 
 version: 2
 updates:
-  - package-ecosystem: "npm"
-    directory: "/"
+  - package-ecosystem: 'npm'
+    directory: '/'
     schedule:
-      interval: "weekly"
+      interval: 'weekly'
     open-pull-requests-limit: 5
     ignore:
       # The Angular compiler peer-pins TypeScript to a single minor
       # (e.g. ">=6.0 <6.1"). Only take patches here; minor/major TS bumps
       # come in via `ng update` when Angular widens its supported range.
-      - dependency-name: "typescript"
+      - dependency-name: 'typescript'
         update-types:
-          - "version-update:semver-minor"
-          - "version-update:semver-major"
+          - 'version-update:semver-minor'
+          - 'version-update:semver-major'
     groups:
       # One PR per week for every version update (direct deps, all update
       # types). Build + test locally before merging, since majors land here.
       all-dependencies:
         applies-to: version-updates
         patterns:
-          - "*"
+          - '*'
       # Security updates (incl. transitive deps) don't use version-update
       # groups, so bundle them separately instead of one PR per package.
       security:
         applies-to: security-updates
         patterns:
-          - "*"
+          - '*'

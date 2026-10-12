@@ -1,4 +1,5 @@
-import { Component, ChangeDetectionStrategy } from '@angular/core';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
+
 import { MapComponent } from './components/map/map';
 import { SidebarComponent } from './components/sidebar/sidebar';
 
@@ -6,7 +7,7 @@ import { SidebarComponent } from './components/sidebar/sidebar';
   selector: 'app-root',
   imports: [MapComponent, SidebarComponent],
   templateUrl: './app.html',
-  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './app.css',
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 export class App {}

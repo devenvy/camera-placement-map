@@ -1,5 +1,6 @@
-import { Injectable, signal, effect } from '@angular/core';
-import { Camera } from '../models/camera.model';
+import { effect, Injectable, signal } from '@angular/core';
+
+import type { Camera } from '../models/camera.model';
 
 export interface BuildingPolygon {
   id: number;
@@ -18,7 +19,7 @@ interface BuildingSettings {
 
 @Injectable({ providedIn: 'root' })
 export class BuildingService {
-  private cache = new Map<string, BuildingPolygon[]>();
+  private readonly cache = new Map<string, BuildingPolygon[]>();
 
   private readonly _enabled = signal(false);
   readonly enabled = this._enabled.asReadonly();
@@ -61,10 +62,10 @@ export class BuildingService {
     this._offsetY.set(Math.max(-50, Math.min(50, value)));
   }
 
-  async fetchBuildingsAroundCameras(
-    cameras: Camera[],
-  ): Promise<BuildingPolygon[]> {
-    if (cameras.length === 0) return [];
+  async fetchBuildingsAroundCameras(cameras: Camera[]): Promise<BuildingPolygon[]> {
+    if (cameras.length === 0) {
+      return [];
+    }
 
     const radius = this._searchRadius();
     const padDeg = (radius / 111000) * 1.2;
@@ -92,7 +93,9 @@ export class BuildingService {
   ): Promise<BuildingPolygon[]> {
     const key = `${south.toFixed(4)},${west.toFixed(4)},${north.toFixed(4)},${east.toFixed(4)}`;
     const cached = this.cache.get(key);
-    if (cached) return cached;
+    if (cached) {
+      return cached;
+    }
 
     const query = `[out:json][timeout:10];way["building"](${south},${west},${north},${east});out geom;`;
 
@@ -103,7 +106,9 @@ export class BuildingService {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
 
-      if (!response.ok) return [];
+      if (!response.ok) {
+        return [];
+      }
 
       const data = await response.json();
       const buildings: BuildingPolygon[] = [];
@@ -129,7 +134,9 @@ export class BuildingService {
   private loadSettings(): void {
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
-      if (!raw) return;
+      if (!raw) {
+        return;
+      }
       const settings: BuildingSettings = JSON.parse(raw);
       if (typeof settings.enabled === 'boolean') {
         this._enabled.set(settings.enabled);

@@ -1,17 +1,19 @@
-import { Component, inject, input, ChangeDetectionStrategy } from '@angular/core';
-import { Camera } from '../../models/camera.model';
+import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
+
 import { CameraService } from '../../services/camera.service';
+
+import type { Camera } from '../../models/camera.model';
 
 @Component({
   selector: 'app-camera-editor',
   templateUrl: './camera-editor.html',
-  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './camera-editor.css',
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 export class CameraEditorComponent {
-  private cameraService = inject(CameraService);
+  private readonly cameraService = inject(CameraService);
 
-  camera = input.required<Camera>();
+  readonly camera = input.required<Camera>();
 
   protected cloneCamera(): void {
     this.cameraService.cloneCamera(this.camera().id);

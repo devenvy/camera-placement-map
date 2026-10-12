@@ -5,8 +5,8 @@
 >
   <!-- Toggle button -->
   <button
-    (click)="toggleCollapse()"
     class="p-3 hover:bg-gray-800 flex items-center justify-center shrink-0"
+    (click)="toggleCollapse()"
   >
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -31,8 +31,8 @@
       <div class="flex items-center justify-between">
         <h2 class="text-lg font-semibold">Cameras</h2>
         <button
-          (click)="addCamera()"
           class="px-2.5 py-1 bg-sky-600 hover:bg-sky-500 rounded text-xs font-medium transition-colors"
+          (click)="addCamera()"
         >
           + Add
         </button>
@@ -50,15 +50,14 @@
           <div class="flex justify-between items-center">
             <span class="text-sm font-medium">{{ camera.name }}</span>
             <button
-              (click)="deleteCamera(camera.id, $event)"
               class="text-xs px-2 py-0.5 rounded bg-red-900/50 text-red-400 hover:bg-red-800/60 hover:text-red-300 transition-colors"
+              (click)="deleteCamera(camera.id, $event)"
             >
               Delete
             </button>
           </div>
           <div class="text-xs text-gray-400 mt-1">
-            FOV: {{ camera.fov }}&deg; &middot; Heading:
-            {{ camera.heading }}&deg;
+            FOV: {{ camera.fov }}&deg; &middot; Heading: {{ camera.heading }}&deg;
           </div>
         </div>
       } @empty {
@@ -76,17 +75,15 @@
     <!-- Buildings -->
     <div class="px-4 py-3 border-t border-gray-700 shrink-0">
       <div class="flex items-center justify-between mb-2">
-        <span class="text-xs font-semibold uppercase tracking-wider text-gray-400"
-          >Buildings</span
-        >
+        <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Buildings</span>
         <button
-          (click)="toggleBuildings()"
           class="text-xs px-2 py-0.5 rounded transition-colors"
           [class]="
             buildingService.enabled()
               ? 'bg-orange-600 hover:bg-orange-500'
               : 'bg-gray-700 hover:bg-gray-600'
           "
+          (click)="toggleBuildings()"
         >
           {{ buildingService.enabled() ? 'ON' : 'OFF' }}
         </button>
@@ -100,9 +97,9 @@
               min="10"
               max="1000"
               step="10"
+              class="w-14 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-xs text-right focus:border-sky-500 focus:outline-none"
               [value]="buildingService.searchRadius()"
               (change)="updateSearchRadius($event)"
-              class="w-14 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-xs text-right focus:border-sky-500 focus:outline-none"
             />
             <span class="text-xs text-gray-500">m</span>
           </div>
@@ -115,9 +112,9 @@
               min="-50"
               max="50"
               step="1"
+              class="w-14 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-xs text-right focus:border-sky-500 focus:outline-none"
               [value]="buildingService.offsetX()"
               (change)="updateOffsetX($event)"
-              class="w-14 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-xs text-right focus:border-sky-500 focus:outline-none"
             />
             <span class="text-xs text-gray-500">m</span>
           </div>
@@ -130,9 +127,9 @@
               min="-50"
               max="50"
               step="1"
+              class="w-14 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-xs text-right focus:border-sky-500 focus:outline-none"
               [value]="buildingService.offsetY()"
               (change)="updateOffsetY($event)"
-              class="w-14 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-xs text-right focus:border-sky-500 focus:outline-none"
             />
             <span class="text-xs text-gray-500">m</span>
           </div>
@@ -142,13 +139,8 @@
 
     <!-- Settings -->
     <div class="px-4 py-3 border-t border-gray-700 shrink-0">
-      <button
-        (click)="toggleSettings()"
-        class="flex items-center justify-between w-full"
-      >
-        <span class="text-xs font-semibold uppercase tracking-wider text-gray-400"
-          >Settings</span
-        >
+      <button class="flex items-center justify-between w-full" (click)="toggleSettings()">
+        <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Settings</span>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="12"
@@ -174,10 +166,14 @@
             }
             <input
               type="text"
-              [value]="settingsService.googleApiKey()"
-              (change)="updateApiKey('google', $event)"
-              [placeholder]="settingsService.googleFromServer() ? 'Using server key (override here)' : 'Enter key...'"
               class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs mt-0.5 focus:border-sky-500 focus:outline-none"
+              [value]="settingsService.googleApiKey()"
+              [placeholder]="
+                settingsService.googleFromServer()
+                  ? 'Using server key (override here)'
+                  : 'Enter key...'
+              "
+              (change)="updateApiKey('google', $event)"
             />
           </div>
           <div>
@@ -187,10 +183,14 @@
             }
             <input
               type="text"
-              [value]="settingsService.mapboxToken()"
-              (change)="updateApiKey('mapbox', $event)"
-              [placeholder]="settingsService.mapboxFromServer() ? 'Using server token (override here)' : 'Enter token...'"
               class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs mt-0.5 focus:border-sky-500 focus:outline-none"
+              [value]="settingsService.mapboxToken()"
+              [placeholder]="
+                settingsService.mapboxFromServer()
+                  ? 'Using server token (override here)'
+                  : 'Enter token...'
+              "
+              (change)="updateApiKey('mapbox', $event)"
             />
           </div>
           <div>
@@ -200,10 +200,14 @@
             }
             <input
               type="text"
-              [value]="settingsService.bingApiKey()"
-              (change)="updateApiKey('bing', $event)"
-              [placeholder]="settingsService.bingFromServer() ? 'Using server key (override here)' : 'Enter key...'"
               class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs mt-0.5 focus:border-sky-500 focus:outline-none"
+              [value]="settingsService.bingApiKey()"
+              [placeholder]="
+                settingsService.bingFromServer()
+                  ? 'Using server key (override here)'
+                  : 'Enter key...'
+              "
+              (change)="updateApiKey('bing', $event)"
             />
           </div>
         </div>
@@ -213,8 +217,8 @@
     <!-- Import / Export -->
     <div class="p-4 border-t border-gray-700 flex gap-2 shrink-0">
       <button
-        (click)="exportCameras()"
         class="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded text-sm transition-colors"
+        (click)="exportCameras()"
       >
         Export
       </button>
@@ -222,12 +226,7 @@
         class="flex-1 px-3 py-2 bg-green-600 hover:bg-green-500 rounded text-sm text-center cursor-pointer transition-colors"
       >
         Import
-        <input
-          type="file"
-          accept=".json"
-          (change)="importCameras($event)"
-          class="hidden"
-        />
+        <input type="file" accept=".json" class="hidden" (change)="importCameras($event)" />
       </label>
     </div>
   }
