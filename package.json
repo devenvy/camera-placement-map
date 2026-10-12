@@ -7,7 +7,7 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "test:ci": "ng test --watch=false",
+    "test:ci": "ng test --watch=false --coverage",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -35,6 +35,7 @@
     "@devenvy/code-guidelines": "file:D:/Source/.code-guidelines-local/devenvy-code-guidelines-0.0.0.tgz",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/leaflet": "^1.9.22",
+    "@vitest/coverage-v8": "^5.0.3",
     "angular-eslint": "^22.6.0",
     "eslint": "^10.12.0",
     "jsdom": "^30.1.1",
@@ -50,5 +51,7 @@
     "typescript": true,
     "angular": true,
     "vitest": true
-  }
+  },
+  "license": "MIT",
+  "description": "Plan security camera placement and coverage on a map."
 }

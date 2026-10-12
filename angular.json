@@ -44,7 +44,19 @@
                   "maximumError": "8kB"
                 }
               ],
-              "outputHashing": "all"
+              "outputHashing": "all",
+              "optimization": {
+                "scripts": true,
+                "styles": {
+                  "minify": true,
+                  "inlineCritical": false
+                },
+                "fonts": true
+              },
+              "index": {
+                "input": "src/index.prod.html",
+                "output": "index.html"
+              }
             },
             "development": {
               "optimization": false,
@@ -67,7 +79,16 @@
           "defaultConfiguration": "development"
         },
         "test": {
-          "builder": "@angular/build:unit-test"
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "coverageReporters": ["text-summary", "json-summary", "json", "html"],
+            "coverageThresholds": {
+              "statements": 17,
+              "branches": 16,
+              "functions": 8,
+              "lines": 17
+            }
+          }
         }
       }
     }
