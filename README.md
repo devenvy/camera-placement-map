@@ -18,8 +18,8 @@ A visual planning tool for security camera placement. Place cameras on a satelli
 ## Getting Started
 
 ```bash
-npm install
-ng serve
+pnpm install
+pnpm start
 ```
 
 Open `http://localhost:4200/`. Click **+ Add** to place a camera at the center of the map, then drag it into position and adjust its properties in the sidebar.
@@ -46,10 +46,22 @@ Open `http://localhost:8080/`.
 ## Building
 
 ```bash
-ng build
+pnpm run build
 ```
 
 Build output goes to `dist/`.
+
+## CI and releases
+
+- **CI** (`ci.yml`), on every pull request and weekly: lint (including `code-guidelines check`,
+  knip, actionlint and zizmor), unit tests with coverage, the production build, a runtime dependency
+  audit, dependency review, and a container build with a smoke test. `result` is the single
+  required check. CodeQL and Code Quality also run on pull requests.
+- **Every push to `main`** (`release.yml`): CI, then the site deploys to GitHub Pages and the image
+  is pushed to `ghcr.io/devenvy/camera-placement-map` as `latest` and `sha-<commit>`.
+- **Releases** are cut by hand: `gh release create vX.Y.Z --target main --generate-notes` (or the
+  Releases page). Publishing one runs CI, pushes the image as `X.Y.Z` and `X.Y`, and attaches a zip of
+  the static build and an SBOM to the release.
 
 ## Tile Providers
 
