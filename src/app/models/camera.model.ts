@@ -8,11 +8,7 @@ export interface Camera {
   range: number;
 }
 
-export function createCamera(
-  lat: number,
-  lng: number,
-  index: number,
-): Camera {
+export function createCamera(lat: number, lng: number, index: number): Camera {
   return {
     id: crypto.randomUUID(),
     name: `Camera ${index}`,

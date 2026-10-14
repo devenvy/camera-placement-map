@@ -1,72 +1,81 @@
 import {
-  Component,
-  AfterViewInit,
-  OnDestroy,
-  ViewChild,
-  ElementRef,
-  inject,
-  effect,
-  untracked,
-  NgZone,
+  type AfterViewInit,
   ChangeDetectionStrategy,
+  Component,
+  effect,
+  type ElementRef,
+  inject,
+  NgZone,
+  type OnDestroy,
+  untracked,
+  viewChild,
 } from '@angular/core';
 import * as L from 'leaflet';
 import { GeoSearchControl, OpenStreetMapProvider } from 'leaflet-geosearch';
-import { Camera } from '../../models/camera.model';
+
+import { BingTileLayer } from './bing-tile-layer';
+import { type BuildingPolygon, BuildingService } from '../../services/building.service';
 import { CameraService } from '../../services/camera.service';
-import {
-  BuildingService,
-  BuildingPolygon,
-} from '../../services/building.service';
 import { SettingsService } from '../../services/settings.service';
-import {
-  computeSimpleFov,
-  computeVisibilityFov,
-} from '../../utils/visibility';
+import { computeSimpleFov, computeVisibilityFov } from '../../utils/visibility';
+
+import type { Camera } from '../../models/camera.model';
 
 const CAMERA_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`;
 
 const FOV_COLOR = '#38bdf8';
 const FOV_SELECTED_COLOR = '#facc15';
 
+const DEFAULT_CENTER = { lat: 40.0, lng: -74.5 };
+const FOV_STYLE = {
+  fillOpacity: 0.2,
+  selectedFillOpacity: 0.3,
+  weight: 1,
+  selectedWeight: 2,
+};
+const SELECTED_MARKER_Z_INDEX_OFFSET = 1000;
+const MARKER_ICON_SIZE_PX = 28;
+const MARKER_ICON_ANCHOR_PX = 14; // half of MARKER_ICON_SIZE_PX
+const FLY_TO_MIN_ZOOM = 18;
+const FIT_BOUNDS_PADDING_PX = 50;
+const METERS_PER_DEGREE_LAT = 111_320;
+const DEGREES_PER_HALF_TURN = 180;
+const DEG_TO_RAD = Math.PI / DEGREES_PER_HALF_TURN;
+
 @Component({
-  selector: 'app-map',
+  selector: 'cpm-map',
   templateUrl: './map.html',
-  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './map.css',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MapComponent implements AfterViewInit, OnDestroy {
-  @ViewChild('mapContainer', { static: true })
-  mapContainer!: ElementRef<HTMLDivElement>;
+  private readonly cameraService = inject(CameraService);
+  private readonly buildingService = inject(BuildingService);
+  private readonly settingsService = inject(SettingsService);
+  private readonly zone = inject(NgZone);
 
-  private cameraService = inject(CameraService);
-  private buildingService = inject(BuildingService);
-  private settingsService = inject(SettingsService);
-  private zone = inject(NgZone);
-  private map!: L.Map;
-  private cameraLayers = new Map<
-    string,
-    { marker: L.Marker; fov: L.Polygon }
-  >();
+  private readonly mapContainer = viewChild.required<ElementRef<HTMLDivElement>>('mapContainer');
+  private mapInstance?: L.Map;
+  private readonly cameraLayers = new Map<string, { marker: L.Marker; fov: L.Polygon }>();
   private resizeObserver?: ResizeObserver;
-  private buildingLayer = L.layerGroup();
+  private readonly buildingLayer = L.layerGroup();
   private cachedBuildings: BuildingPolygon[] = [];
   private layerControl?: L.Control.Layers;
 
   constructor() {
     effect(() => {
       const cameras = this.cameraService.cameras();
-      if (this.map) {
+      if (this.mapInstance) {
         this.syncCamerasToMap(cameras);
         if (this.buildingService.enabled()) {
-          this.loadBuildings();
+          this.refreshBuildings();
         }
       }
     });
 
     effect(() => {
       const selectedId = this.cameraService.selectedId();
-      if (this.map) {
+      if (this.mapInstance) {
         untracked(() => {
           this.highlightSelected(selectedId);
           this.flyToCamera(selectedId);
@@ -77,15 +86,15 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     // React to building settings changes
     effect(() => {
       const enabled = this.buildingService.enabled();
-      const _radius = this.buildingService.searchRadius();
-      if (this.map) {
+      this.buildingService.searchRadius(); // track
+      if (this.mapInstance) {
         if (enabled) {
-          if (!this.map.hasLayer(this.buildingLayer)) {
-            this.buildingLayer.addTo(this.map);
+          if (!this.mapInstance.hasLayer(this.buildingLayer)) {
+            this.buildingLayer.addTo(this.mapInstance);
           }
-          this.loadBuildings();
+          this.refreshBuildings();
         } else {
-          this.map.removeLayer(this.buildingLayer);
+          this.mapInstance.removeLayer(this.buildingLayer);
           this.buildingLayer.clearLayers();
           this.cachedBuildings = [];
           this.recomputeAllFovs();
@@ -95,19 +104,21 @@ export class MapComponent implements AfterViewInit, OnDestroy {
 
     // React to building offset changes
     effect(() => {
-      const _ox = this.buildingService.offsetX();
-      const _oy = this.buildingService.offsetY();
-      if (this.map && this.buildingService.enabled()) {
+      // track
+      this.buildingService.offsetX();
+      this.buildingService.offsetY();
+      if (this.mapInstance && this.buildingService.enabled()) {
         untracked(() => this.renderBuildings());
       }
     });
 
     // React to tile provider API key changes
     effect(() => {
-      const _g = this.settingsService.googleApiKey();
-      const _m = this.settingsService.mapboxToken();
-      const _b = this.settingsService.bingApiKey();
-      if (this.map) {
+      // track
+      this.settingsService.googleApiKey();
+      this.settingsService.mapboxToken();
+      this.settingsService.bingApiKey();
+      if (this.mapInstance) {
         untracked(() => this.rebuildLayerControl());
       }
     });
@@ -122,7 +133,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     // Restore buildings if previously enabled
     if (this.buildingService.enabled()) {
       this.buildingLayer.addTo(this.map);
-      this.loadBuildings();
+      this.refreshBuildings();
     }
   }
 
@@ -133,12 +144,19 @@ export class MapComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.resizeObserver?.disconnect();
-    this.map?.remove();
+    this.mapInstance?.remove();
+  }
+
+  private get map(): L.Map {
+    if (!this.mapInstance) {
+      throw new Error('Map not initialized');
+    }
+    return this.mapInstance;
   }
 
   private initMap(): void {
-    this.map = L.map(this.mapContainer.nativeElement, {
-      center: [40.0, -74.5],
+    this.mapInstance = L.map(this.mapContainer().nativeElement, {
+      center: [DEFAULT_CENTER.lat, DEFAULT_CENTER.lng],
       zoom: 18,
       zoomControl: true,
     });
@@ -169,7 +187,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     this.resizeObserver = new ResizeObserver(() => {
       this.map.invalidateSize();
     });
-    this.resizeObserver.observe(this.mapContainer.nativeElement);
+    this.resizeObserver.observe(this.mapContainer().nativeElement);
   }
 
   private rebuildLayerControl(): void {
@@ -182,14 +200,11 @@ export class MapComponent implements AfterViewInit, OnDestroy {
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
         { attribution: 'Tiles &copy; Esri', maxNativeZoom: 19, maxZoom: 22 },
       ),
-      Street: L.tileLayer(
-        'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        {
-          attribution: '&copy; OpenStreetMap contributors',
-          maxNativeZoom: 19,
-          maxZoom: 22,
-        },
-      ),
+      Street: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxNativeZoom: 19,
+        maxZoom: 22,
+      }),
     };
 
     const googleKey = this.settingsService.googleApiKey();
@@ -258,15 +273,10 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       const pos = (e.target as L.Marker).getLatLng();
       const fovLayer = this.cameraLayers.get(camera.id)?.fov;
       if (fovLayer) {
-        const current = this.cameraService
-          .cameras()
-          .find((c) => c.id === camera.id);
+        const current = this.cameraService.cameras().find((c) => c.id === camera.id);
         if (current) {
           fovLayer.setLatLngs(
-            this.computeFovForCamera(
-              { ...current, lat: pos.lat, lng: pos.lng },
-              true,
-            ),
+            this.computeFovForCamera({ ...current, lat: pos.lat, lng: pos.lng }, true),
           );
         }
       }
@@ -296,8 +306,8 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     const fov = L.polygon(this.computeFovForCamera(camera), {
       color,
       fillColor: color,
-      fillOpacity: 0.2,
-      weight: isSelected ? 2 : 1,
+      fillOpacity: FOV_STYLE.fillOpacity,
+      weight: isSelected ? FOV_STYLE.selectedWeight : FOV_STYLE.weight,
     });
 
     fov.on('click', (e: L.LeafletMouseEvent) => {
@@ -317,8 +327,8 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     return L.divIcon({
       className: '',
       html: `<div class="camera-marker${selected ? ' selected' : ''}" style="transform: rotate(${camera.heading}deg)">${CAMERA_SVG}</div>`,
-      iconSize: [28, 28],
-      iconAnchor: [14, 14],
+      iconSize: [MARKER_ICON_SIZE_PX, MARKER_ICON_SIZE_PX],
+      iconAnchor: [MARKER_ICON_ANCHOR_PX, MARKER_ICON_ANCHOR_PX],
     });
   }
 
@@ -329,10 +339,10 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       layers.fov.setStyle({
         color,
         fillColor: color,
-        fillOpacity: isSelected ? 0.3 : 0.2,
-        weight: isSelected ? 2 : 1,
+        fillOpacity: isSelected ? FOV_STYLE.selectedFillOpacity : FOV_STYLE.fillOpacity,
+        weight: isSelected ? FOV_STYLE.selectedWeight : FOV_STYLE.weight,
       });
-      layers.marker.setZIndexOffset(isSelected ? 1000 : 0);
+      layers.marker.setZIndexOffset(isSelected ? SELECTED_MARKER_Z_INDEX_OFFSET : 0);
       const camera = this.cameraService.cameras().find((c) => c.id === id);
       if (camera) {
         layers.marker.setIcon(this.createIcon(camera));
@@ -341,25 +351,32 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   }
 
   private flyToCamera(selectedId: string | null): void {
-    if (!selectedId) return;
-    const camera = this.cameraService
-      .cameras()
-      .find((c) => c.id === selectedId);
+    if (!selectedId) {
+      return;
+    }
+    const camera = this.cameraService.cameras().find((c) => c.id === selectedId);
     if (camera) {
-      this.map.flyTo(
-        [camera.lat, camera.lng],
-        Math.max(this.map.getZoom(), 18),
-        { duration: 0.5 },
-      );
+      this.map.flyTo([camera.lat, camera.lng], Math.max(this.map.getZoom(), FLY_TO_MIN_ZOOM), {
+        duration: 0.5,
+      });
     }
   }
 
   private fitBoundsToAll(cameras: Camera[]): void {
-    if (cameras.length === 0) return;
-    const bounds = L.latLngBounds(
-      cameras.map((c) => [c.lat, c.lng] as L.LatLngTuple),
-    );
-    this.map.fitBounds(bounds, { padding: [50, 50], maxZoom: 19 });
+    if (cameras.length === 0) {
+      return;
+    }
+    const bounds = L.latLngBounds(cameras.map((c) => [c.lat, c.lng] as L.LatLngTuple));
+    this.map.fitBounds(bounds, {
+      padding: [FIT_BOUNDS_PADDING_PX, FIT_BOUNDS_PADDING_PX],
+      maxZoom: 19,
+    });
+  }
+
+  private refreshBuildings(): void {
+    this.loadBuildings().catch((err: unknown) => {
+      console.error('Failed to load buildings', err);
+    });
   }
 
   private async loadBuildings(): Promise<void> {
@@ -370,8 +387,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    const buildings =
-      await this.buildingService.fetchBuildingsAroundCameras(cameras);
+    const buildings = await this.buildingService.fetchBuildingsAroundCameras(cameras);
 
     this.cachedBuildings = buildings;
     this.renderBuildings();
@@ -401,10 +417,12 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     ox: number,
     oy: number,
   ): [number, number][] {
-    if (ox === 0 && oy === 0) return coords;
-    const latShift = oy / 111320;
+    if (ox === 0 && oy === 0) {
+      return coords;
+    }
+    const latShift = oy / METERS_PER_DEGREE_LAT;
     return coords.map(([lat, lng]) => {
-      const lngShift = ox / (111320 * Math.cos(lat * (Math.PI / 180)));
+      const lngShift = ox / (METERS_PER_DEGREE_LAT * Math.cos(lat * DEG_TO_RAD));
       return [lat + latShift, lng + lngShift] as [number, number];
     });
   }
@@ -419,15 +437,8 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  private computeFovForCamera(
-    camera: Camera,
-    useSimple = false,
-  ): L.LatLngExpression[] {
-    if (
-      useSimple ||
-      !this.buildingService.enabled() ||
-      this.cachedBuildings.length === 0
-    ) {
+  private computeFovForCamera(camera: Camera, useSimple = false): L.LatLngExpression[] {
+    if (useSimple || !this.buildingService.enabled() || this.cachedBuildings.length === 0) {
       return computeSimpleFov(camera);
     }
     const ox = this.buildingService.offsetX();
@@ -440,37 +451,5 @@ export class MapComponent implements AfterViewInit, OnDestroy {
             coords: this.applyBuildingOffset(b.coords, ox, oy),
           }));
     return computeVisibilityFov(camera, offsetBuildings);
-  }
-}
-
-// Bing Maps uses quadkey tile addressing instead of {z}/{x}/{y}
-class BingTileLayer extends L.TileLayer {
-  constructor(apiKey: string) {
-    super(
-      `https://ecn.t{s}.tiles.virtualearth.net/tiles/a{q}.jpeg?g=14205&key=${apiKey}`,
-      {
-        attribution: '&copy; Microsoft',
-        subdomains: ['0', '1', '2', '3'],
-        maxNativeZoom: 19,
-        maxZoom: 22,
-      },
-    );
-  }
-
-  override getTileUrl(coords: L.Coords): string {
-    const quadkey = this.toQuadKey(coords.x, coords.y, coords.z);
-    return super.getTileUrl(coords).replace('{q}', quadkey);
-  }
-
-  private toQuadKey(x: number, y: number, z: number): string {
-    let key = '';
-    for (let i = z; i > 0; i--) {
-      let digit = 0;
-      const mask = 1 << (i - 1);
-      if ((x & mask) !== 0) digit += 1;
-      if ((y & mask) !== 0) digit += 2;
-      key += digit;
-    }
-    return key;
   }
 }

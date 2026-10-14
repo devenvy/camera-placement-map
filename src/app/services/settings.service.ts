@@ -1,4 +1,4 @@
-import { Injectable, signal, effect, computed } from '@angular/core';
+import { computed, effect, Injectable, signal } from '@angular/core';
 
 interface AppSettings {
   googleApiKey: string;
@@ -11,75 +11,77 @@ const SETTINGS_KEY = 'camera-placement-map-settings';
 @Injectable({ providedIn: 'root' })
 export class SettingsService {
   // Server-provided defaults from config.json
-  private readonly _serverGoogleApiKey = signal('');
-  private readonly _serverMapboxToken = signal('');
-  private readonly _serverBingApiKey = signal('');
+  private readonly serverGoogleApiKey = signal('');
+  private readonly serverMapboxToken = signal('');
+  private readonly serverBingApiKey = signal('');
 
   // User overrides from localStorage / sidebar
-  private readonly _userGoogleApiKey = signal('');
-  private readonly _userMapboxToken = signal('');
-  private readonly _userBingApiKey = signal('');
+  private readonly userGoogleApiKey = signal('');
+  private readonly userMapboxToken = signal('');
+  private readonly userBingApiKey = signal('');
 
   // Effective keys: user override wins, falls back to server default
-  readonly googleApiKey = computed(
-    () => this._userGoogleApiKey() || this._serverGoogleApiKey(),
-  );
-  readonly mapboxToken = computed(
-    () => this._userMapboxToken() || this._serverMapboxToken(),
-  );
-  readonly bingApiKey = computed(
-    () => this._userBingApiKey() || this._serverBingApiKey(),
-  );
+  readonly googleApiKey = computed(() => this.userGoogleApiKey() || this.serverGoogleApiKey());
+  readonly mapboxToken = computed(() => this.userMapboxToken() || this.serverMapboxToken());
+  readonly bingApiKey = computed(() => this.userBingApiKey() || this.serverBingApiKey());
 
   // Whether each key came from the server (shown as hint in UI)
   readonly googleFromServer = computed(
-    () => !this._userGoogleApiKey() && !!this._serverGoogleApiKey(),
+    () => !this.userGoogleApiKey() && Boolean(this.serverGoogleApiKey()),
   );
   readonly mapboxFromServer = computed(
-    () => !this._userMapboxToken() && !!this._serverMapboxToken(),
+    () => !this.userMapboxToken() && Boolean(this.serverMapboxToken()),
   );
   readonly bingFromServer = computed(
-    () => !this._userBingApiKey() && !!this._serverBingApiKey(),
+    () => !this.userBingApiKey() && Boolean(this.serverBingApiKey()),
   );
 
   constructor() {
     this.loadSettings();
-    this.loadServerConfig();
+    this.loadServerConfig().catch((err: unknown) => {
+      console.error('Failed to load server config', err);
+    });
     effect(() => {
       const settings: AppSettings = {
-        googleApiKey: this._userGoogleApiKey(),
-        mapboxToken: this._userMapboxToken(),
-        bingApiKey: this._userBingApiKey(),
+        googleApiKey: this.userGoogleApiKey(),
+        mapboxToken: this.userMapboxToken(),
+        bingApiKey: this.userBingApiKey(),
       };
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     });
   }
 
   setGoogleApiKey(value: string): void {
-    this._userGoogleApiKey.set(value.trim());
+    this.userGoogleApiKey.set(value.trim());
   }
 
   setMapboxToken(value: string): void {
-    this._userMapboxToken.set(value.trim());
+    this.userMapboxToken.set(value.trim());
   }
 
   setBingApiKey(value: string): void {
-    this._userBingApiKey.set(value.trim());
+    this.userBingApiKey.set(value.trim());
   }
 
   private loadSettings(): void {
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
-      if (!raw) return;
-      const settings: AppSettings = JSON.parse(raw);
+      if (!raw) {
+        return;
+      }
+      const parsed: unknown = JSON.parse(raw);
+      if (typeof parsed !== 'object' || parsed === null) {
+        return;
+      }
+      const settings = parsed as Partial<Record<keyof AppSettings, unknown>>;
       if (typeof settings.googleApiKey === 'string') {
-        this._userGoogleApiKey.set(settings.googleApiKey);
+        this.userGoogleApiKey.set(settings.googleApiKey);
       }
       if (typeof settings.mapboxToken === 'string') {
-        this._userMapboxToken.set(settings.mapboxToken);
+        this.userMapboxToken.set(settings.mapboxToken);
       }
       if (typeof settings.bingApiKey === 'string') {
-        this._userBingApiKey.set(settings.bingApiKey);
+        this.userBingApiKey.set(settings.bingApiKey);
       }
     } catch {
       // Ignore corrupt settings
@@ -89,16 +91,22 @@ export class SettingsService {
   private async loadServerConfig(): Promise<void> {
     try {
       const response = await fetch('config.json');
-      if (!response.ok) return;
-      const config: Partial<AppSettings> = await response.json();
-      if (config.googleApiKey) {
-        this._serverGoogleApiKey.set(config.googleApiKey);
+      if (!response.ok) {
+        return;
       }
-      if (config.mapboxToken) {
-        this._serverMapboxToken.set(config.mapboxToken);
+      const parsed: unknown = await response.json();
+      if (typeof parsed !== 'object' || parsed === null) {
+        return;
       }
-      if (config.bingApiKey) {
-        this._serverBingApiKey.set(config.bingApiKey);
+      const config = parsed as Partial<Record<keyof AppSettings, unknown>>;
+      if (typeof config.googleApiKey === 'string' && config.googleApiKey) {
+        this.serverGoogleApiKey.set(config.googleApiKey);
+      }
+      if (typeof config.mapboxToken === 'string' && config.mapboxToken) {
+        this.serverMapboxToken.set(config.mapboxToken);
+      }
+      if (typeof config.bingApiKey === 'string' && config.bingApiKey) {
+        this.serverBingApiKey.set(config.bingApiKey);
       }
     } catch {
       // Config file not available, use user-provided keys only

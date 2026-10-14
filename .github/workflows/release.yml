@@ -1,0 +1,179 @@
+name: Release
+
+# Push to main: CI, then the site deploys to GitHub Pages and the container image is pushed as
+# `latest` and `sha-<commit>`. Merges in quick succession queue up: the run in progress finishes,
+# and only the newest waiting run follows it (GitHub replaces a pending run in the same group).
+#
+# Published GitHub release (tag vX.Y.Z on main, cut by hand): CI, then the image is pushed as
+# `X.Y.Z` and `X.Y` (a prerelease such as v1.2.0-rc.1 only as `1.2.0-rc.1`), and the static build
+# and an SPDX SBOM are attached to the release. Builds are attested (build provenance).
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch: # redeploy main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event_name == 'release' && 'tag' || 'main' }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: A release tag must be a version on main
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::\"$TAG\" is not a release tag like v1.2.0"
+            exit 1
+          fi
+          status=$(gh api "repos/$GITHUB_REPOSITORY/compare/main...$TAG" --jq .status)
+          if [ "$status" != identical ] && [ "$status" != behind ]; then
+            echo "::error::$TAG is not on main"
+            exit 1
+          fi
+
+  # CI (including the container smoke test) must pass before anything is published.
+  ci:
+    needs: verify
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+      pull-requests: write # ci.yml's test job declares it (used only for PR coverage comments)
+
+  pages-build:
+    needs: ci
+    if: github.event_name != 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          # no dependency cache in a job that publishes (cache poisoning)
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      # Optional default API keys for the deployed site. They end up in a public file, so they
+      # are repository *variables* (not secrets) and must be HTTP-referrer-restricted keys.
+      - name: Write config.json
+        env:
+          GOOGLE_API_KEY: ${{ vars.GOOGLE_API_KEY }}
+          MAPBOX_TOKEN: ${{ vars.MAPBOX_TOKEN }}
+          BING_API_KEY: ${{ vars.BING_API_KEY }}
+        run: |
+          jq -n --arg g "$GOOGLE_API_KEY" --arg m "$MAPBOX_TOKEN" --arg b "$BING_API_KEY" '{googleApiKey: $g, mapboxToken: $m, bingApiKey: $b}' > public/config.json
+      - run: pnpm run build
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: dist/camera-placement-map/browser
+
+  pages-deploy:
+    needs: pages-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+  image:
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write # push the image to GHCR
+      id-token: write # build provenance attestation
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository }}
+          # main: latest + sha-<commit>; a release tag: X.Y.Z + X.Y (only X.Y.Z-pre for a prerelease)
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+      - id: image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
+
+  release-assets:
+    needs: ci
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # attach the build to the release
+      id-token: write # build provenance attestation
+      attestations: write
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          # no dependency cache in a job that publishes (cache poisoning)
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - name: Zip the static build and write the SBOM
+        run: |
+          (cd dist/camera-placement-map/browser && zip -r "$GITHUB_WORKSPACE/camera-placement-map-$TAG.zip" .)
+          pnpm sbom --sbom-format spdx --prod --sbom-type application --out "camera-placement-map-$TAG.spdx.json"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: camera-placement-map-${{ github.event.release.tag_name }}.zip
+      - name: Attach the build and SBOM to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$TAG" "camera-placement-map-$TAG.zip" "camera-placement-map-$TAG.spdx.json" \
+            --repo "$GITHUB_REPOSITORY" --clobber

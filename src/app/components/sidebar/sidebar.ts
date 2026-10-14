@@ -1,25 +1,29 @@
-import { Component, inject, input, signal, ChangeDetectionStrategy } from '@angular/core';
-import { CameraService } from '../../services/camera.service';
+import { ChangeDetectionStrategy, Component, inject, input, signal } from '@angular/core';
+
 import { BuildingService } from '../../services/building.service';
+import { CameraService } from '../../services/camera.service';
 import { SettingsService } from '../../services/settings.service';
 import { CameraEditorComponent } from '../camera-editor/camera-editor';
-import { MapComponent } from '../map/map';
+
+import type { MapComponent } from '../map/map';
+
+const ISO_DATE_LENGTH = 10; // YYYY-MM-DD
 
 @Component({
-  selector: 'app-sidebar',
+  selector: 'cpm-sidebar',
   imports: [CameraEditorComponent],
   templateUrl: './sidebar.html',
-  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './sidebar.css',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SidebarComponent {
   protected cameraService = inject(CameraService);
   protected buildingService = inject(BuildingService);
   protected settingsService = inject(SettingsService);
-  protected collapsed = signal(false);
-  protected settingsOpen = signal(false);
+  protected readonly collapsed = signal(false);
+  protected readonly settingsOpen = signal(false);
 
-  mapRef = input.required<MapComponent>();
+  readonly mapRef = input.required<MapComponent>();
 
   protected toggleCollapse(): void {
     this.collapsed.update((v) => !v);
@@ -34,6 +38,17 @@ export class SidebarComponent {
     this.cameraService.selectCamera(id);
   }
 
+  protected onCameraKeydown(id: string, event: KeyboardEvent): void {
+    // Ignore key events bubbling up from the nested Delete button
+    if (event.target !== event.currentTarget) {
+      return;
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this.selectCamera(id);
+    }
+  }
+
   protected deleteCamera(id: string, event: Event): void {
     event.stopPropagation();
     this.cameraService.deleteCamera(id);
@@ -45,7 +60,7 @@ export class SidebarComponent {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `cameras-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `cameras-${new Date().toISOString().slice(0, ISO_DATE_LENGTH)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -55,28 +70,25 @@ export class SidebarComponent {
   }
 
   protected updateSearchRadius(event: Event): void {
-    const value = +(event.target as HTMLInputElement).value;
+    const value = Number((event.target as HTMLInputElement).value);
     if (value > 0) {
       this.buildingService.setSearchRadius(value);
     }
   }
 
   protected updateOffsetX(event: Event): void {
-    this.buildingService.setOffsetX(+(event.target as HTMLInputElement).value);
+    this.buildingService.setOffsetX(Number((event.target as HTMLInputElement).value));
   }
 
   protected updateOffsetY(event: Event): void {
-    this.buildingService.setOffsetY(+(event.target as HTMLInputElement).value);
+    this.buildingService.setOffsetY(Number((event.target as HTMLInputElement).value));
   }
 
   protected toggleSettings(): void {
     this.settingsOpen.update((v) => !v);
   }
 
-  protected updateApiKey(
-    provider: 'google' | 'mapbox' | 'bing',
-    event: Event,
-  ): void {
+  protected updateApiKey(provider: 'google' | 'mapbox' | 'bing', event: Event): void {
     const value = (event.target as HTMLInputElement).value;
     switch (provider) {
       case 'google':
@@ -88,23 +100,26 @@ export class SidebarComponent {
       case 'bing':
         this.settingsService.setBingApiKey(value);
         break;
+      default:
+        break;
     }
   }
 
   protected importCameras(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
+    const fileInput = event.target as HTMLInputElement;
+    const file = fileInput.files?.[0];
+    if (!file) {
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
-      const result = this.cameraService.importFromJson(
-        reader.result as string,
-      );
+      const result = this.cameraService.importFromJson(reader.result as string);
       if (!result.success) {
-        alert(`Import failed: ${result.error}`);
+        // eslint-disable-next-line no-alert -- simple blocking error prompt; the app has no in-app notification UI
+        alert(`Import failed: ${result.error ?? 'unknown error'}`);
       }
     };
     reader.readAsText(file);
-    input.value = '';
+    fileInput.value = '';
   }
 }

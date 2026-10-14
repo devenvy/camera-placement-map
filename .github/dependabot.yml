@@ -1,31 +1,62 @@
-# Dependabot configuration
-# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
-
 version: 2
-updates:
-  - package-ecosystem: "npm"
-    directory: "/"
+
+# One weekly pull request for everything (npm, GitHub Actions, Docker base images), plus one per
+# ecosystem for security fixes. Version updates wait out a 7-day cooldown, so a compromised release
+# is usually caught before it reaches a PR (security updates are not delayed).
+# Major versions are left out so that PR stays green: they usually need code changes or are blocked by
+# Angular's supported ranges (e.g. Angular 22 requires TypeScript 6.0.x), and odd Node.js majors never
+# become LTS. Do major upgrades by hand (`ng update` for Angular; a new @devenvy/code-guidelines major
+# is a deliberate baseline change).
+multi-ecosystem-groups:
+  dependencies:
     schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
-    ignore:
-      # The Angular compiler peer-pins TypeScript to a single minor
-      # (e.g. ">=6.0 <6.1"). Only take patches here; minor/major TS bumps
-      # come in via `ng update` when Angular widens its supported range.
-      - dependency-name: "typescript"
-        update-types:
-          - "version-update:semver-minor"
-          - "version-update:semver-major"
+      interval: weekly
+      day: monday
+    labels: [dependencies]
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    patterns: ['*']
+    multi-ecosystem-group: dependencies
+    cooldown:
+      default-days: 7
+      exclude: ['@devenvy/*'] # our own baseline updates arrive without delay
     groups:
-      # One PR per week for every version update (direct deps, all update
-      # types). Build + test locally before merging, since majors land here.
-      all-dependencies:
-        applies-to: version-updates
-        patterns:
-          - "*"
-      # Security updates (incl. transitive deps) don't use version-update
-      # groups, so bundle them separately instead of one PR per package.
       security:
         applies-to: security-updates
-        patterns:
-          - "*"
+        patterns: ['*']
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
+      # Angular 22's compiler supports TypeScript 6.0.x only
+      - dependency-name: typescript
+        update-types: [version-update:semver-minor]
+
+  - package-ecosystem: github-actions
+    directory: /
+    patterns: ['*']
+    multi-ecosystem-group: dependencies
+    cooldown:
+      default-days: 7
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ['*']
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: docker
+    directory: /
+    patterns: ['*']
+    multi-ecosystem-group: dependencies
+    cooldown:
+      default-days: 7
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ['*']
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]

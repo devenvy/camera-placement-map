@@ -1,5 +1,6 @@
-import { Injectable, signal, effect } from '@angular/core';
-import { Camera } from '../models/camera.model';
+import { effect, Injectable, signal } from '@angular/core';
+
+import type { Camera } from '../models/camera.model';
 
 export interface BuildingPolygon {
   id: number;
@@ -8,6 +9,48 @@ export interface BuildingPolygon {
 
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
 const SETTINGS_KEY = 'camera-placement-map-buildings';
+
+const DEFAULT_SEARCH_RADIUS_M = 150;
+const MIN_SEARCH_RADIUS_M = 10;
+const MAX_SEARCH_RADIUS_M = 1000;
+const MAX_OFFSET_M = 50;
+const METERS_PER_DEGREE = 111_000;
+const BBOX_PADDING_FACTOR = 1.2;
+const CACHE_KEY_DECIMALS = 4;
+
+interface OverpassPoint {
+  lat: number;
+  lon: number;
+}
+
+interface OverpassWay {
+  type: 'way';
+  id: number;
+  geometry: OverpassPoint[];
+}
+
+function isOverpassWay(element: unknown): element is OverpassWay {
+  return (
+    typeof element === 'object' &&
+    element !== null &&
+    'type' in element &&
+    element.type === 'way' &&
+    'geometry' in element &&
+    Array.isArray(element.geometry)
+  );
+}
+
+function getOverpassElements(data: unknown): unknown[] {
+  if (
+    typeof data === 'object' &&
+    data !== null &&
+    'elements' in data &&
+    Array.isArray(data.elements)
+  ) {
+    return data.elements;
+  }
+  return [];
+}
 
 interface BuildingSettings {
   enabled: boolean;
@@ -18,56 +61,56 @@ interface BuildingSettings {
 
 @Injectable({ providedIn: 'root' })
 export class BuildingService {
-  private cache = new Map<string, BuildingPolygon[]>();
+  private readonly cache = new Map<string, BuildingPolygon[]>();
 
-  private readonly _enabled = signal(false);
-  readonly enabled = this._enabled.asReadonly();
+  readonly #enabled = signal(false);
+  readonly enabled = this.#enabled.asReadonly();
 
-  private readonly _searchRadius = signal(150);
-  readonly searchRadius = this._searchRadius.asReadonly();
+  readonly #searchRadius = signal(DEFAULT_SEARCH_RADIUS_M);
+  readonly searchRadius = this.#searchRadius.asReadonly();
 
-  private readonly _offsetX = signal(0);
-  readonly offsetX = this._offsetX.asReadonly();
+  readonly #offsetX = signal(0);
+  readonly offsetX = this.#offsetX.asReadonly();
 
-  private readonly _offsetY = signal(0);
-  readonly offsetY = this._offsetY.asReadonly();
+  readonly #offsetY = signal(0);
+  readonly offsetY = this.#offsetY.asReadonly();
 
   constructor() {
     this.loadSettings();
     effect(() => {
       const settings: BuildingSettings = {
-        enabled: this._enabled(),
-        searchRadius: this._searchRadius(),
-        offsetX: this._offsetX(),
-        offsetY: this._offsetY(),
+        enabled: this.#enabled(),
+        searchRadius: this.#searchRadius(),
+        offsetX: this.#offsetX(),
+        offsetY: this.#offsetY(),
       };
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     });
   }
 
   setEnabled(value: boolean): void {
-    this._enabled.set(value);
+    this.#enabled.set(value);
   }
 
   setSearchRadius(value: number): void {
-    this._searchRadius.set(Math.max(10, Math.min(1000, value)));
+    this.#searchRadius.set(Math.max(MIN_SEARCH_RADIUS_M, Math.min(MAX_SEARCH_RADIUS_M, value)));
   }
 
   setOffsetX(value: number): void {
-    this._offsetX.set(Math.max(-50, Math.min(50, value)));
+    this.#offsetX.set(Math.max(-MAX_OFFSET_M, Math.min(MAX_OFFSET_M, value)));
   }
 
   setOffsetY(value: number): void {
-    this._offsetY.set(Math.max(-50, Math.min(50, value)));
+    this.#offsetY.set(Math.max(-MAX_OFFSET_M, Math.min(MAX_OFFSET_M, value)));
   }
 
-  async fetchBuildingsAroundCameras(
-    cameras: Camera[],
-  ): Promise<BuildingPolygon[]> {
-    if (cameras.length === 0) return [];
+  async fetchBuildingsAroundCameras(cameras: Camera[]): Promise<BuildingPolygon[]> {
+    if (cameras.length === 0) {
+      return [];
+    }
 
-    const radius = this._searchRadius();
-    const padDeg = (radius / 111000) * 1.2;
+    const radius = this.#searchRadius();
+    const padDeg = (radius / METERS_PER_DEGREE) * BBOX_PADDING_FACTOR;
 
     let south = Infinity;
     let west = Infinity;
@@ -90,9 +133,11 @@ export class BuildingService {
     north: number,
     east: number,
   ): Promise<BuildingPolygon[]> {
-    const key = `${south.toFixed(4)},${west.toFixed(4)},${north.toFixed(4)},${east.toFixed(4)}`;
+    const key = `${south.toFixed(CACHE_KEY_DECIMALS)},${west.toFixed(CACHE_KEY_DECIMALS)},${north.toFixed(CACHE_KEY_DECIMALS)},${east.toFixed(CACHE_KEY_DECIMALS)}`;
     const cached = this.cache.get(key);
-    if (cached) return cached;
+    if (cached) {
+      return cached;
+    }
 
     const query = `[out:json][timeout:10];way["building"](${south},${west},${north},${east});out geom;`;
 
@@ -103,18 +148,18 @@ export class BuildingService {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
 
-      if (!response.ok) return [];
+      if (!response.ok) {
+        return [];
+      }
 
-      const data = await response.json();
+      const data: unknown = await response.json();
       const buildings: BuildingPolygon[] = [];
 
-      for (const element of data.elements ?? []) {
-        if (element.type === 'way' && element.geometry) {
+      for (const element of getOverpassElements(data)) {
+        if (isOverpassWay(element)) {
           buildings.push({
             id: element.id,
-            coords: element.geometry.map(
-              (p: { lat: number; lon: number }) => [p.lat, p.lon] as [number, number],
-            ),
+            coords: element.geometry.map((p) => [p.lat, p.lon] as [number, number]),
           });
         }
       }
@@ -129,19 +174,25 @@ export class BuildingService {
   private loadSettings(): void {
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
-      if (!raw) return;
-      const settings: BuildingSettings = JSON.parse(raw);
+      if (!raw) {
+        return;
+      }
+      const parsed: unknown = JSON.parse(raw);
+      if (typeof parsed !== 'object' || parsed === null) {
+        return;
+      }
+      const settings = parsed as Partial<Record<keyof BuildingSettings, unknown>>;
       if (typeof settings.enabled === 'boolean') {
-        this._enabled.set(settings.enabled);
+        this.#enabled.set(settings.enabled);
       }
       if (typeof settings.searchRadius === 'number') {
-        this._searchRadius.set(settings.searchRadius);
+        this.#searchRadius.set(settings.searchRadius);
       }
       if (typeof settings.offsetX === 'number') {
-        this._offsetX.set(settings.offsetX);
+        this.#offsetX.set(settings.offsetX);
       }
       if (typeof settings.offsetY === 'number') {
-        this._offsetY.set(settings.offsetY);
+        this.#offsetY.set(settings.offsetY);
       }
     } catch {
       // Ignore corrupt settings

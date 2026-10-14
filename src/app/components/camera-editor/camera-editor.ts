@@ -1,17 +1,19 @@
-import { Component, inject, input, ChangeDetectionStrategy } from '@angular/core';
-import { Camera } from '../../models/camera.model';
+import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
+
 import { CameraService } from '../../services/camera.service';
 
+import type { Camera } from '../../models/camera.model';
+
 @Component({
-  selector: 'app-camera-editor',
+  selector: 'cpm-camera-editor',
   templateUrl: './camera-editor.html',
-  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './camera-editor.css',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CameraEditorComponent {
-  private cameraService = inject(CameraService);
+  private readonly cameraService = inject(CameraService);
 
-  camera = input.required<Camera>();
+  readonly camera = input.required<Camera>();
 
   protected cloneCamera(): void {
     this.cameraService.cloneCamera(this.camera().id);
@@ -23,17 +25,17 @@ export class CameraEditorComponent {
   }
 
   protected updateHeading(event: Event): void {
-    const value = +(event.target as HTMLInputElement).value;
+    const value = Number((event.target as HTMLInputElement).value);
     this.cameraService.updateCamera(this.camera().id, { heading: value });
   }
 
   protected updateFov(event: Event): void {
-    const value = +(event.target as HTMLInputElement).value;
+    const value = Number((event.target as HTMLInputElement).value);
     this.cameraService.updateCamera(this.camera().id, { fov: value });
   }
 
   protected updateRange(event: Event): void {
-    const value = +(event.target as HTMLInputElement).value;
+    const value = Number((event.target as HTMLInputElement).value);
     this.cameraService.updateCamera(this.camera().id, { range: value });
   }
 }
